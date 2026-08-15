@@ -4,7 +4,6 @@ using GitHub.Copilot.Rpc;
 
 namespace HelloCopilotSDK.Helpers;
 
-#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.7.
 
 public static class WorkshopPermissionHandler
 {
@@ -57,4 +56,3 @@ public static class WorkshopPermissionHandler
     }
 }
 
-#pragma warning restore GHCP001

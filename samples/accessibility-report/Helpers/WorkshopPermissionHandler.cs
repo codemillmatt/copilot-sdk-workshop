@@ -4,8 +4,6 @@ using GitHub.Copilot.Rpc;
 
 namespace AccessibilityReport.Helpers;
 
-#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.7.
-
 public static class WorkshopPermissionHandler
 {
     public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> CreateForTarget(
@@ -56,5 +54,3 @@ public static class WorkshopPermissionHandler
                        StringComparison.Ordinal);
     }
 }
-
-#pragma warning restore GHCP001

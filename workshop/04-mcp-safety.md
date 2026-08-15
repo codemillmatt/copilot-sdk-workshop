@@ -101,9 +101,8 @@ files, and snapshots larger than 1 MB. Navigation is approved only when the comp
 matches the target supplied at startup. Scheme and host use URL-standard case-insensitive
 comparison. Path, query, and fragment must match case-sensitively.
 
-> **SDK note:** version 1.0.7 ships `PermissionHandler.ApproveAll`, but no built-in scoped handler.
-> The starter therefore includes a hand-written delegate. `PermissionDecision` is currently marked
-> evaluation-only, so that one helper contains a localized `GHCP001` suppression.
+> **SDK note:** `PermissionHandler.ApproveAll` is provided by the SDK, but no built-in scoped handler
+> exists. The starter therefore includes a hand-written delegate.
 
 <details>
 <summary>Inspect the prebuilt permission handler</summary>
