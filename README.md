@@ -72,8 +72,8 @@ It also builds the starter, every checkpoint, both samples, and the Blazor targe
 The repository's workflows are currently disabled. Their definitions are preserved with a
 `.disabled` suffix under `.github/workflows/`; remove that suffix to re-enable them.
 
-Enable GitHub Pages in repository settings and choose **GitHub Actions** as the source. The
-deployment job reports the canonical workshop URL in its environment.
+After re-enabling the workflows, enable GitHub Pages in repository settings and choose
+**GitHub Actions** as the source.
 
 ## References
 
