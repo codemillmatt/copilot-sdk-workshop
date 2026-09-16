@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Instructor preparation, chapter notes, and a short teaching deck for the Museum Exhibit Studio Copilot SDK workshop.">
+    <title>Museum instructor guide | Copilot SDK Workshop</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="../step.css">
+    <link rel="stylesheet" href="../light-theme.css">
+    <link rel="stylesheet" href="instructor.css">
+    <script src="../theme-toggle.js"></script>
+    <script src="../language-registry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#instructorContent">Skip to instructor notes</a>
+    <header class="site-header">
+        <a class="site-brand" href="../index.html?workshop=museum">Copilot SDK Workshop</a>
+        <nav class="site-nav" aria-label="Instructor resources">
+            <a href="../index.html?workshop=museum">Learner workshop</a>
+            <button class="theme-toggle" type="button" onclick="toggleTheme()">Light</button>
+        </nav>
+    </header>
+    <main class="home-shell instructor-shell">
+        <aside class="instructor-navigation">
+            <p class="eyebrow">Instructor companion</p>
+            <p>Preparation and deeper notes. Learners do not need to read this track.</p>
+            <a class="deck-download" href="museum-instructor.pptx" download>Download the eight-slide PowerPoint</a>
+            <label for="instructorLanguage">Language for learner links</label>
+            <select id="instructorLanguage" aria-label="Language for learner links"></select>
+            <nav id="instructorNavigation" aria-label="Instructor chapters"></nav>
+        </aside>
+        <article class="markdown" id="instructorContent" aria-busy="true">
+            <p role="status">Loading instructor notes...</p>
+        </article>
+    </main>
+    <script src="instructor.js"></script>
+</body>
+</html>

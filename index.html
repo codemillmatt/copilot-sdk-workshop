@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Learn to build an AI agent with the GitHub Copilot SDK. Create conversations, connect tools, control permissions, and check results.">
+    <title>Build an agent with the GitHub Copilot SDK</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="light-theme.css">
+    <script src="theme-toggle.js"></script>
+    <script src="language-registry.js"></script>
+    <script src="language-navigation.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to workshop overview</a>
+
+    <header class="site-header">
+        <a href="index.html" class="site-brand" aria-label="Copilot SDK Workshop home">
+            <span class="brand-mark" aria-hidden="true">🤖</span>
+            <span>Copilot SDK Workshop</span>
+        </a>
+        <nav class="site-nav" aria-label="Workshop resources">
+            <a id="targetAppLink" href="target-app/index.html" target="_blank" rel="noopener" hidden>Practice web page ↗</a>
+            <a id="sdkDocsLink" target="_blank" rel="noopener" aria-disabled="true">📚 SDK docs ↗</a>
+            <button class="theme-toggle" type="button" onclick="toggleTheme()">☀️ Light</button>
+        </nav>
+    </header>
+
+    <main class="home-shell" id="main">
+        <section class="workshop-introduction" aria-labelledby="hero-title">
+            <div class="hero-copy">
+                <h1 id="hero-title">Build an AI agent with the GitHub Copilot SDK.</h1>
+                <p class="hero-definition">
+                    Configure a model-driven worker for a task. Give it instructions and tools,
+                    then control how it works from your own application.
+                </p>
+                <p>
+                    The GitHub Copilot SDK is your programming interface.
+                    The Copilot CLI runtime is the harness that runs the agent's model-and-tool loop.
+                </p>
+            </div>
+            <figure class="hero-art">
+                <img src="assets/workshop-hero.svg" width="680" height="590"
+                    alt="Illustration of an application connected through the Copilot SDK to the Copilot CLI harness, with exhibit-draft and accessibility-report cards as example outputs."
+                    fetchpriority="high">
+            </figure>
+        </section>
+
+        <section class="outcomes" aria-labelledby="outcomes-title">
+            <h2 id="outcomes-title">What you'll learn</h2>
+            <ul>
+                <li>Create a conversation and stream its response.</li>
+                <li>Give the agent a function your application owns.</li>
+                <li>Connect external tools with Model Context Protocol (MCP).</li>
+                <li>Control permissions and check the result.</li>
+            </ul>
+        </section>
+
+        <hr class="section-divider">
+
+        <section class="workshop-start" aria-labelledby="start-title">
+            <h2 id="start-title">Choose your project and language</h2>
+            <p class="start-description">
+                Bring basic programming and GitHub Copilot experience. No SDK knowledge is needed.
+                Each lesson gives you a short explanation, an edit, and a result to check.
+            </p>
+            <div class="hero-layout">
+            <div class="hero-copy">
+                <fieldset class="workshop-picker" id="workshop-picker">
+                    <legend>Choose a workshop</legend>
+                    <label class="workshop-option" data-workshop="sdlc">
+                        <input type="radio" name="workshop" value="sdlc">
+                        <span class="workshop-option-copy">
+                            <span class="workshop-kicker">Developer tool · Self-paced</span>
+                            <strong>Review web accessibility</strong>
+                            <span>Build an agent that inspects a web page and recommends fixes using your application's accessibility guidance.</span>
+                            <span class="workshop-capabilities">Your result: a report with observed evidence, suggested fixes, and review limits.</span>
+                        </span>
+                    </label>
+                    <label class="workshop-option" data-workshop="museum">
+                        <input type="radio" name="workshop" value="museum">
+                        <span class="workshop-option-copy">
+                            <span class="workshop-kicker">Museum writing tool · Self-paced</span>
+                            <strong>Draft a museum exhibit</strong>
+                            <span>Help a museum educator turn approved facts into a short exhibit draft and visitor questions for human review.</span>
+                            <span class="workshop-capabilities">Your result: a draft with format checks, optional research notes, and an optional local web page.</span>
+                        </span>
+                    </label>
+                </fieldset>
+                <p class="project-context">
+                    The software development life cycle (SDLC) covers building and maintaining software.
+                    The accessibility reviewer supports that work. The museum agent is a non-SDLC example:
+                    it helps with museum writing rather than software development.
+                </p>
+
+                <section class="language-picker" id="language-picker" aria-labelledby="language-picker-title">
+                    <h2 id="language-picker-title">Choose your workshop language</h2>
+                    <p id="languageSummary">Choose a project, then select the language you want to use.</p>
+                    <fieldset class="language-options" id="languagePicker" disabled>
+                        <legend class="visually-hidden">Programming language</legend>
+                        <label class="language-option" data-language="dotnet">
+                            <input type="radio" name="language" value="dotnet" required>
+                            <span>.NET / C#</span>
+                        </label>
+                        <label class="language-option" data-language="go">
+                            <input type="radio" name="language" value="go">
+                            <span>Go</span>
+                        </label>
+                        <label class="language-option" data-language="java">
+                            <input type="radio" name="language" value="java">
+                            <span>Java</span>
+                        </label>
+                        <label class="language-option" data-language="nodejs">
+                            <input type="radio" name="language" value="nodejs">
+                            <span>Node.js / TypeScript</span>
+                        </label>
+                        <label class="language-option" data-language="python">
+                            <input type="radio" name="language" value="python">
+                            <span>Python</span>
+                        </label>
+                        <label class="language-option" data-language="rust">
+                            <input type="radio" name="language" value="rust">
+                            <span>Rust</span>
+                        </label>
+                    </fieldset>
+                </section>
+            </div>
+
+            <aside class="terminal-preview" aria-label="What the selected application does">
+                <div class="terminal-bar">
+                    <span></span><span></span><span></span>
+                    <p id="previewTitle">Your application</p>
+                </div>
+                <pre><code id="workshopPreview">Choose a project to see its input, its work, and the result you will inspect.</code></pre>
+            </aside>
+            </div>
+            <div class="hero-action">
+                <a class="primary-action" id="startWorkshopLink" href="#workshop-picker" aria-disabled="true">Start selected workshop</a>
+                <p id="startGuidance">Choose a project and language to open its introduction and setup instructions.</p>
+            </div>
+        </section>
+
+        <hr class="section-divider">
+
+        <section class="workshop-explanation" aria-labelledby="purpose-title">
+            <h2 id="purpose-title">Why build an agent into an application?</h2>
+            <p>
+                A prompt asks for behavior. Your application must also control data, permissions, and failures.
+                Learn where the model makes a choice and where code enforces a rule.
+            </p>
+            <h3>What is the agent, exactly?</h3>
+            <p>
+                Here, an agent is a model-driven worker configured with instructions, conversation context, and optional tools.
+                The model, SDK client, session, and tool functions are components, not complete agents by themselves.
+                The Copilot CLI harness runs their interaction.
+            </p>
+        </section>
+    </main>
+
+    <script>
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        const siteRoot = window.location.hostname.endsWith('.github.io') && pathSegments.length > 0
+            ? new URL(`/${pathSegments[0]}/`, window.location.origin)
+            : new URL('./', window.location.href);
+        window.workshopSiteRoot = siteRoot;
+        updateToggleIcon();
+    </script>
+    <script src="homepage.js"></script>
+</body>
+</html>

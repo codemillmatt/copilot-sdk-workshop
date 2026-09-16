@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 630" role="img" aria-labelledby="title desc">
+  <title id="title">Research and drafting use separate conversations</title>
+  <desc id="desc">The educator's approved facts go to both sessions. The drafting session can request only approved_fact_lookup and returns an exhibit draft. The research session can request Wikipedia search and article reading through a separate MCP server, then returns background notes and unverified links. Both results go to the educator. There is no path from research notes into the draft or approved facts.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#246b76"/></marker>
+    <style>
+      text { font-family: system-ui, sans-serif; fill: #172c3b; }
+      .heading { font-size: 23px; font-weight: 700; }
+      .body { font-size: 19px; }
+      .small { font-size: 17px; }
+      .link { stroke: #246b76; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="720" height="630" rx="18" fill="#f4f7f8"/>
+  <rect x="180" y="20" width="360" height="65" rx="12" fill="#fff" stroke="#63818b"/>
+  <text x="360" y="61" text-anchor="middle" class="heading">Educator-approved facts</text>
+  <path class="link" d="M290 88V112H184V144"/>
+  <path class="link" d="M430 88V112H536V144"/>
+  <rect x="25" y="150" width="315" height="139" rx="12" fill="#e1f0f0" stroke="#246b76" stroke-width="2"/>
+  <text x="182" y="186" text-anchor="middle" class="heading">Drafting session</text>
+  <text x="182" y="219" text-anchor="middle" class="body">One local tool:</text>
+  <text x="182" y="252" text-anchor="middle" class="body">approved_fact_lookup</text>
+  <rect x="380" y="150" width="315" height="139" rx="12" fill="#f7ead7" stroke="#88632b" stroke-width="2"/>
+  <text x="537" y="186" text-anchor="middle" class="heading">Research session</text>
+  <text x="537" y="219" text-anchor="middle" class="body">Wikipedia search</text>
+  <text x="537" y="252" text-anchor="middle" class="body">and article reading</text>
+  <path class="link" d="M502 292V325"/>
+  <path class="link" d="M572 325V292"/>
+  <rect x="380" y="332" width="315" height="66" rx="10" fill="#fff" stroke="#88632b"/>
+  <text x="537" y="359" text-anchor="middle" class="body">Wikipedia MCP server</text>
+  <text x="537" y="385" text-anchor="middle" class="small">Separate program with web access</text>
+  <path class="link" d="M72 292V416H182V430"/>
+  <path class="link" d="M695 219H710V450H682"/>
+  <rect x="25" y="436" width="315" height="74" rx="12" fill="#fff" stroke="#63818b"/>
+  <text x="182" y="480" text-anchor="middle" class="heading">Exhibit draft + checks</text>
+  <rect x="380" y="436" width="315" height="74" rx="12" fill="#fff" stroke="#63818b"/>
+  <text x="537" y="465" text-anchor="middle" class="heading">Background notes</text>
+  <text x="537" y="493" text-anchor="middle" class="body">Model-reported links, unverified</text>
+  <path class="link" d="M182 513V544H310V562"/>
+  <path class="link" d="M537 513V544H410V562"/>
+  <rect x="180" y="568" width="360" height="44" rx="10" fill="#e1f0f0" stroke="#246b76"/>
+  <text x="360" y="598" text-anchor="middle" class="heading">Educator reviews both</text>
+  <text x="182" y="350" text-anchor="middle" class="body">Research notes never</text>
+  <text x="182" y="378" text-anchor="middle" class="body">become drafting input</text>
+</svg>

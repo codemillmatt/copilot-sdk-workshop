@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 685" role="img" aria-labelledby="title desc">
+  <title id="title">How the curator requests approved facts</title>
+  <desc id="desc">First the educator selects facts, which the application holds. The Copilot CLI harness offers the approved_fact_lookup tool to the model. If the model requests it, the harness invokes the local function. The function returns the selected list. The Copilot CLI harness passes that result to the model, which drafts exhibit text. The function is a tool, not another agent.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#246b76"/></marker>
+    <style>
+      text { font-family: system-ui, sans-serif; fill: #172c3b; }
+      .heading { font-size: 23px; font-weight: 700; }
+      .body { font-size: 19px; }
+      .link { stroke: #246b76; stroke-width: 3; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="600" height="685" rx="18" fill="#f4f7f8"/>
+  <rect x="35" y="20" width="530" height="86" rx="12" fill="#e1f0f0" stroke="#246b76"/>
+  <text x="300" y="55" text-anchor="middle" class="heading">1. The educator selects the facts</text>
+  <text x="300" y="84" text-anchor="middle" class="body">Your application holds this approved list</text>
+  <path class="link" d="M300 109V151"/>
+  <rect x="35" y="157" width="530" height="86" rx="12" fill="#f7ead7" stroke="#88632b"/>
+  <text x="300" y="192" text-anchor="middle" class="heading">2. The model can request the tool</text>
+  <text x="300" y="221" text-anchor="middle" class="body">The prompt asks for approved_fact_lookup</text>
+  <path class="link" d="M300 246V288"/>
+  <rect x="35" y="294" width="530" height="86" rx="12" fill="#e1f0f0" stroke="#246b76"/>
+  <text x="300" y="329" text-anchor="middle" class="heading">3. Your local function returns the list</text>
+  <text x="300" y="358" text-anchor="middle" class="body">The CLI harness returns it to the conversation</text>
+  <path class="link" d="M300 383V425"/>
+  <rect x="35" y="431" width="530" height="86" rx="12" fill="#f7ead7" stroke="#88632b"/>
+  <text x="300" y="466" text-anchor="middle" class="heading">4. The model writes a draft</text>
+  <text x="300" y="495" text-anchor="middle" class="body">Tool data informs the next model response</text>
+  <path class="link" d="M300 520V562"/>
+  <rect x="35" y="568" width="530" height="91" rx="12" fill="#fff" stroke="#63818b"/>
+  <text x="300" y="603" text-anchor="middle" class="heading">5. The educator reviews the claims</text>
+  <text x="300" y="634" text-anchor="middle" class="body">A tool call does not prove factual accuracy</text>
+</svg>

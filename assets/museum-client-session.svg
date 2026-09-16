@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 820" role="img" aria-labelledby="title desc">
+  <title id="title">Components used by the curator agent</title>
+  <desc id="desc">The educator uses Museum Exhibit Studio. Its SDK client connects to the Copilot CLI harness. The SDK session identifies one conversation whose messages the Copilot CLI runtime manages. The harness sends context to the model service and returns the reply. These are components used by the curator agent, not separate agents.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#246b76"/></marker>
+    <style>
+      text { font-family: system-ui, sans-serif; fill: #172c3b; }
+      .heading { font-size: 24px; font-weight: 700; }
+      .body { font-size: 19px; }
+      .small { font-size: 17px; }
+      .link { stroke: #246b76; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="600" height="820" rx="18" fill="#f4f7f8"/>
+  <rect x="50" y="22" width="500" height="72" rx="12" fill="#fff" stroke="#91a8b2"/>
+  <text x="300" y="52" text-anchor="middle" class="heading">Museum educator</text>
+  <text x="300" y="79" text-anchor="middle" class="body">Uses the application to request a draft</text>
+  <path class="link" d="M270 96V172"/>
+  <path class="link" d="M330 172V96"/>
+  <rect x="22" y="128" width="556" height="472" rx="16" fill="none" stroke="#63818b" stroke-dasharray="7 5"/>
+  <text x="43" y="156" class="small">ON YOUR MACHINE</text>
+  <rect x="50" y="178" width="500" height="187" rx="12" fill="#e1f0f0" stroke="#246b76" stroke-width="2"/>
+  <text x="300" y="214" text-anchor="middle" class="heading">Your application</text>
+  <rect x="72" y="235" width="216" height="103" rx="9" fill="#fff" stroke="#91a8b2"/>
+  <text x="180" y="266" text-anchor="middle" class="heading">SDK client</text>
+  <text x="180" y="294" text-anchor="middle" class="body">Connects to</text>
+  <text x="180" y="319" text-anchor="middle" class="body">the CLI harness</text>
+  <rect x="308" y="235" width="220" height="103" rx="9" fill="#fff" stroke="#91a8b2"/>
+  <text x="418" y="266" text-anchor="middle" class="heading">SDK session</text>
+  <text x="418" y="294" text-anchor="middle" class="body">Identifies one</text>
+  <text x="418" y="319" text-anchor="middle" class="body">conversation</text>
+  <path class="link" d="M270 368V413"/>
+  <path class="link" d="M330 413V368"/>
+  <rect x="50" y="416" width="500" height="158" rx="12" fill="#fff" stroke="#246b76" stroke-width="2"/>
+  <text x="300" y="452" text-anchor="middle" class="heading">Copilot CLI runtime</text>
+  <text x="300" y="482" text-anchor="middle" class="body">Coordinates model requests and replies</text>
+  <rect x="77" y="501" width="446" height="49" rx="8" fill="#e1f0f0"/>
+  <text x="300" y="532" text-anchor="middle" class="body">Session state: messages and tool results</text>
+  <path class="link" d="M210 577V690"/>
+  <path class="link" d="M390 690V577"/>
+  <text x="191" y="633" text-anchor="end" class="small">Prompt + context</text>
+  <text x="409" y="650" class="small">Reply</text>
+  <rect x="50" y="695" width="500" height="95" rx="12" fill="#f7ead7" stroke="#88632b" stroke-width="2"/>
+  <text x="300" y="733" text-anchor="middle" class="heading">Model service</text>
+  <text x="300" y="765" text-anchor="middle" class="body">Generates text from the supplied context</text>
+</svg>
