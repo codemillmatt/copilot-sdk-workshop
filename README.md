@@ -97,7 +97,7 @@ copilot-sdk-workshop/
 |-- finished/java/                Completed Maven Java projects
 |-- src/BlazorApp/                Source counterpart of the deployed target
 |-- scripts/                      Deterministic content and build validation
-`-- .github/workflows/            Validation and Pages deployment
+`-- .github/workflows/            Disabled validation and Pages workflows
 ```
 
 ## Validate a change
@@ -154,12 +154,12 @@ cache.
 
 ## Deployment
 
-After validation passes, push to `main`. The
-[Pages workflow](.github/workflows/deploy.yml) publishes `docs/` plus the Markdown lessons in
-`workshop/`. Build and content validation run separately in the validation workflow.
+GitHub Pages is published from the root of the `gh-pages` branch. That branch contains the static
+contents of `docs/`, the learner lessons under `workshop/`, and the instructor content required by
+the direct instructor URL.
 
-Enable GitHub Pages in repository settings and choose **GitHub Actions** as the source. The
-deployment job reports the canonical workshop URL in its environment.
+The repository's GitHub Actions workflows are disabled. Their definitions are preserved with a
+`.disabled` suffix under `.github/workflows/`.
 
 ## References
 
