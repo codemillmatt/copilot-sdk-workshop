@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use github_copilot_sdk::permission;
 use github_copilot_sdk::types::{SessionConfig, SystemMessageConfig};
 use github_copilot_sdk::{Client, ClientOptions, IndexMap};
 use museum_exhibit_studio::{
-    APPROVED_FACT_LOOKUP_NAME, EXHIBIT_FILE_NAME, FactBoundsError, GENERATION_TIMEOUT,
-    RESEARCH_TIMEOUT, RuntimeError, WIKIPEDIA_TOOLS, approved_fact_lookup, ask_line, ask_yes_no,
-    bound_facts, exhibit_write_permission, extract_sources, fact_sets, format_validation,
-    read_facts, stream_exhibit, validate_exhibit, wikipedia_permission_handler, wikipedia_server,
+    APPROVED_FACT_LOOKUP_NAME, DenyUnexpectedPermissions, EXHIBIT_FILE_NAME, FactBoundsError,
+    GENERATION_TIMEOUT, RESEARCH_TIMEOUT, RuntimeError, WIKIPEDIA_TOOLS, approved_fact_lookup,
+    ask_line, ask_yes_no, bound_facts, capture_artifact_state, exhibit_write_permission,
+    extract_sources, fact_sets, format_validation, read_facts, stream_exhibit, validate_exhibit,
+    verify_artifact_update, wikipedia_permission_handler, wikipedia_server,
 };
 
 const SYSTEM_MESSAGE: &str = r#"You are an interpretive museum exhibit curator.
@@ -110,7 +110,8 @@ fn selected_model() -> Option<String> {
 }
 
 fn generation_config(approved_facts: &[String]) -> Result<SessionConfig, FactBoundsError> {
-    let mut config = SessionConfig::default().with_permission_handler(permission::approve_all());
+    let mut config =
+        SessionConfig::default().with_permission_handler(Arc::new(DenyUnexpectedPermissions));
     config.client_name = Some("museum-exhibit-studio".to_owned());
     config.model = selected_model();
     config.tools = Some(vec![approved_fact_lookup(approved_facts)?]);
@@ -153,6 +154,7 @@ fn html_config(working_directory: PathBuf) -> SessionConfig {
     config.model = selected_model();
     config.available_tools = Some(vec!["builtin:apply_patch".to_owned()]);
     config.streaming = Some(true);
+    config.working_directory = Some(working_directory.clone());
     config.with_permission_handler(Arc::new(exhibit_write_permission(working_directory)))
 }
 
@@ -168,7 +170,12 @@ async fn run_session(
         let disconnect_result = session.disconnect().await;
         match (stream_result, disconnect_result) {
             (Ok(content), Ok(())) => Ok(content),
-            (Err(error), _) => Err(error),
+            (Err(error), cleanup) => {
+                if let Err(cleanup) = cleanup {
+                    eprintln!("Session cleanup also failed: {cleanup}");
+                }
+                Err(error)
+            }
             (Ok(_), Err(error)) => Err(Box::new(error) as RuntimeError),
         }
     }
@@ -176,7 +183,12 @@ async fn run_session(
     let stop_result = client.stop().await;
     let content = match (session_result, stop_result) {
         (Ok(content), Ok(())) => content,
-        (Err(error), _) => return Err(error),
+        (Err(error), cleanup) => {
+            if let Err(cleanup) = cleanup {
+                eprintln!("Client cleanup also failed: {cleanup}");
+            }
+            return Err(error);
+        }
         (Ok(_), Err(error)) => return Err(Box::new(error) as RuntimeError),
     };
     if content.trim().is_empty() {
@@ -229,16 +241,21 @@ async fn run() -> Result<(), RuntimeError> {
     }
     let facts = bound_facts(facts)?;
 
-    let mut consulted_sources = Vec::new();
+    let mut model_reported_sources = Vec::new();
     if ask_yes_no("Research the subject on Wikipedia first?", false)? {
         println!();
         let research_prompt = build_research_prompt(&facts)?;
         match run_session(research_config(), research_prompt, RESEARCH_TIMEOUT).await {
             Ok(research_notes) => {
-                consulted_sources = extract_sources(&research_notes).sources;
+                model_reported_sources = extract_sources(&research_notes).sources;
                 println!(
                     "Research notes are background for you only. They are not added to the approved facts."
                 );
+                if model_reported_sources.is_empty() {
+                    println!(
+                        "Research completed without usable model-reported citations. No sources were verified."
+                    );
+                }
             }
             Err(error) => {
                 println!("Wikipedia research did not complete: {error}");
@@ -253,24 +270,32 @@ async fn run() -> Result<(), RuntimeError> {
     println!();
     println!("{}", format_validation(&validate_exhibit(&exhibit)));
 
-    if !consulted_sources.is_empty() {
+    if !model_reported_sources.is_empty() {
         println!();
-        println!("Consulted Wikipedia sources:");
-        for source in &consulted_sources {
+        println!("Model-reported Wikipedia sources (unverified):");
+        for source in &model_reported_sources {
             println!("- {}: {}", source.title, source.url);
         }
+        println!(
+            "Verify these links, their contents, and their support for the research yourself; parsing does not prove they were consulted."
+        );
     }
 
     println!();
     if ask_yes_no("Generate an interactive exhibit.html?", false)? {
         let working_directory = std::env::current_dir()?;
+        let artifact = capture_artifact_state(&working_directory, EXHIBIT_FILE_NAME)?;
+        println!("Model HTML response (not file verification):");
         run_session(
             html_config(working_directory),
             build_html_prompt(&exhibit),
             GENERATION_TIMEOUT,
         )
         .await?;
-        println!("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+        verify_artifact_update(&artifact)?;
+        println!(
+            "Verified a new or changed nonempty exhibit.html. Review its facts, HTML safety, accessibility, and external assets before use."
+        );
     }
 
     Ok(())

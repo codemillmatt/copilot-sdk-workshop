@@ -1,8 +1,6 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +27,8 @@ jobs:
           cp -r docs/* ./_site/
           mkdir -p ./_site/workshop
           cp -r workshop/* ./_site/workshop/
+          mkdir -p ./_site/instructor/content
+          cp instructor/museum/*.md ./_site/instructor/content/
           touch ./_site/.nojekyll
 
       - uses: actions/configure-pages@v6

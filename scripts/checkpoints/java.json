@@ -1,0 +1,667 @@
+{
+  "accessibility": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "01-first-session-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "02-streaming-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "block": "03-local-tool-java-1"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "03-local-tool-java-2",
+          "indent": 4
+        },
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            var config = new SessionConfig()",
+          "end": ".setStreaming(true);",
+          "block": "03-local-tool-java-3",
+          "indent": 12
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            try (var session = client.createSession(config).get())",
+          "block": "03-local-tool-java-4",
+          "indent": 12
+        }
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "block": "04-mcp-safety-java-9"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        try (var client = new CopilotClient())",
+          "block": "04-mcp-safety-java-8",
+          "indent": 8
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        var lookup = ToolDefinition.from(",
+          "block": "04-mcp-safety-java-1",
+          "indent": 8
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-2",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-4",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-7",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        URI target = parseTargetArgument(args);",
+          "end": ".setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));",
+          "block": "05-combine-tools-java-1"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        try (var client = new CopilotClient())",
+          "block": "05-combine-tools-java-3"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "05-combine-tools-java-2"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    private static String lookupRule(",
+          "block": "05-combine-tools-java-4",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    public static void main(",
+          "block": "06-structured-report-java-2",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "06-structured-report-java-1",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "07-run-explain.md",
+      "operations": []
+    }
+  ],
+  "accessibility-html-direct": [
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "05-combine-tools-java-5"
+        }
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    public static void main(",
+          "block": "06-structured-report-java-2",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "06-structured-report-java-1",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "text": "import java.util.concurrent.CompletableFuture;"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "09-interactive-html-report-java-1",
+          "indent": 4
+        },
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": ".setAvailableTools(List.of(",
+          "end": "\"playwright-browser_navigate\"))",
+          "text": ""
+        },
+        {
+          "op": "replace",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": ".setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target))",
+          "block": "09-interactive-html-report-java-3"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            try (var session = client.createSession(config).get())",
+          "block": "09-interactive-html-report-java-2",
+          "indent": 12
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    private static String reportPrompt(",
+          "block": "09-interactive-html-report-java-4",
+          "indent": 4
+        }
+      ]
+    }
+  ],
+  "accessibility-model-html": [
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "05-combine-tools-java-5"
+        }
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    public static void main(",
+          "block": "06-structured-report-java-2",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "06-structured-report-java-1",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "08-model-selection.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/ModelSelector.java",
+          "block": "08-model-selection-java-1"
+        },
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        var config = new SessionConfig()",
+          "end": ".setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));",
+          "text": ""
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        try (var client = new CopilotClient())",
+          "block": "08-model-selection-java-2",
+          "indent": 8
+        }
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "text": "import java.util.concurrent.CompletableFuture;"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "09-interactive-html-report-java-1",
+          "indent": 4
+        },
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": ".setAvailableTools(List.of(",
+          "end": "\"playwright-browser_navigate\"))",
+          "text": ""
+        },
+        {
+          "op": "replace",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": ".setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target))",
+          "block": "09-interactive-html-report-java-3"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            try (var session = client.createSession(config).get())",
+          "block": "09-interactive-html-report-java-2",
+          "indent": 12
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    private static String reportPrompt(",
+          "block": "09-interactive-html-report-java-4",
+          "indent": 4
+        }
+      ]
+    }
+  ],
+  "museum": [
+    {
+      "lesson": "museum-01-first-curator-session.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "block": "museum-01-first-curator-session-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-02-stream-the-curator.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "block": "museum-02-stream-the-curator-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-03-curator-voice.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "block": "museum-03-curator-voice-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-04-approved-facts.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "Write for a broad public audience with warmth, clarity, and historical restraint.",
+          "block": "museum-04-approved-facts-shared-1",
+          "indent": 12
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "\n}",
+          "block": "museum-04-approved-facts-java-1"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "    public static void main(",
+          "block": "museum-04-approved-facts-java-2"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-05-guardrails.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "package workshop;",
+          "block": "museum-05-guardrails-java-1"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "\n}",
+          "block": "museum-05-guardrails-java-2"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "    public static void main(",
+          "block": "museum-05-guardrails-java-3"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-06-prove-the-structure.md",
+      "operations": [
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "            System.out.println();\n            runSession(generationConfig(facts)",
+          "end": "buildExhibitPrompt(), CuratorStreamer.GENERATION_TIMEOUT);",
+          "block": "museum-06-prove-the-structure-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-07-wikipedia-research.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "package workshop;",
+          "text": "import java.util.Map;"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "    public static final String SYSTEM_MESSAGE",
+          "block": "museum-07-wikipedia-research-java-1"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "\n}",
+          "block": "museum-07-wikipedia-research-java-2"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "            System.out.println();\n            String exhibit = runSession(",
+          "block": "museum-07-wikipedia-research-java-3"
+        },
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "            System.out.println(CuratorValidation.formatValidation(CuratorValidation.validateExhibit(exhibit)));",
+          "block": "museum-07-wikipedia-research-java-4"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-08-interactive-exhibit-page.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "package workshop;",
+          "block": "museum-08-interactive-exhibit-page-java-1"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "\n}",
+          "block": "museum-08-interactive-exhibit-page-java-2"
+        },
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "        int exitCode = 0;\n        try {",
+          "block": "museum-08-interactive-exhibit-page-java-3"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/MuseumExhibitStudio.java",
+          "anchor": "        } catch (Exception exception) {\n            exitCode = 1;",
+          "block": "museum-08-interactive-exhibit-page-java-4"
+        }
+      ]
+    }
+  ],
+  "accessibility-references": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "01-first-session-java-3"
+        }
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "02-streaming-java-3"
+        }
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "03-local-tool-java-6"
+        }
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "05-combine-tools-java-5"
+        }
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    private static URI parseTarget(",
+          "text": ""
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    private static URI parseTargetArgument(",
+          "text": ""
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "    public static void main(",
+          "block": "06-structured-report-java-4",
+          "indent": 4
+        }
+      ]
+    }
+  ],
+  "accessibility-mcp-reference": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "01-first-session-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {
+          "op": "write",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "block": "02-streaming-java-1"
+        }
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "block": "03-local-tool-java-1"
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "03-local-tool-java-2",
+          "indent": 4
+        },
+        {
+          "op": "replace-region",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            var config = new SessionConfig()",
+          "end": ".setStreaming(true);",
+          "block": "03-local-tool-java-3",
+          "indent": 12
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "            try (var session = client.createSession(config).get())",
+          "block": "03-local-tool-java-4",
+          "indent": 12
+        }
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "package workshop;",
+          "block": "04-mcp-safety-java-9"
+        },
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        try (var client = new CopilotClient())",
+          "block": "04-mcp-safety-java-8",
+          "indent": 8
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        var lookup = ToolDefinition.from(",
+          "block": "04-mcp-safety-java-1",
+          "indent": 8
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-2",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-4",
+          "indent": 4
+        },
+        {
+          "op": "before",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "\n}",
+          "block": "04-mcp-safety-java-7",
+          "indent": 4
+        }
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "src/main/java/workshop/AccessibilityReport.java",
+          "anchor": "        var config = new SessionConfig()",
+          "block": "04-mcp-safety-java-11",
+          "indent": 8
+        }
+      ]
+    }
+  ]
+}

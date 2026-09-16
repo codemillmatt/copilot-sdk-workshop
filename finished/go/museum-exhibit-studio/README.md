@@ -29,23 +29,30 @@ go build -mod=readonly ./...
 ## What the sample teaches
 
 Generation uses a replacement system message, an allowlist naming exactly one application-owned
-tool (`approved_fact_lookup`, which returns the bounded approved facts), event
+tool (`approved_fact_lookup`, which returns the bounded approved facts and skips permission
+requests), denial of unexpected permissions, event
 streaming, and a 120-second timeout. Optional Wikipedia research runs in a separate 90-second
 session with only scoped search and article-read tools plus a deny-by-default permission handler.
-Research is shown as background for the human curator only: it searches, reads, and cites consulted
-articles in a trailing `## Sources` section. It no longer uses a strict JSON contract, proposed
-additions, source URL schema validation, or an approval loop, and research findings are never merged
-into the approved facts used for exhibit generation.
+Research is shown as background for the human curator only. Its trailing `## Sources` section
+contains model-reported links, not verified evidence that the pages exist or were consulted.
+Research findings are never merged into the approved facts used for exhibit generation.
 
 After generation, deterministic validation checks one H1, required sections, a 100-140-word
 narrative, exactly three numbered visitor questions ending in `?`, and prohibited software terms.
-The consulted Wikipedia sources are printed after the exhibit, outside the generated copy.
+Model-reported Wikipedia sources are printed after the exhibit, explicitly marked unverified.
+Check the links and their support for the research yourself. Successful research without usable
+parsed citations produces an explicit notice. Structural validation remains advisory.
 
 Optionally, the app can ask Copilot to create `exhibit.html` with `builtin:apply_patch`. That session
 allows only a single normalized write to `exhibit.html` in the application working directory and
 rejects every other file, shell, or MCP permission request. The HTML prompt requires a standalone
 semantic document with embedded CSS and JavaScript, a human-review caveat, and an accessible question
-filter.
+filter. `CaptureArtifactState(workingDirectory, fileName)` records the exact target and its prior
+content fingerprint before the session; `VerifyArtifactUpdate(snapshot)` requires a newly created
+or content-changed nonempty regular nonsymlink file afterward. Missing, empty, unchanged, unreadable,
+directory, and symlink outputs fail verification without deleting the previous artifact.
+File verification does not prove factual accuracy, HTML safety, accessibility, or absence of external
+assets; review the page and its source before use.
 
 This is the application a learner ends up with after the museum lessons, not a separate reference
 architecture. The entrypoint keeps one small session runner that starts the client, creates the

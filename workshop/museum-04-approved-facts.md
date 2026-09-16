@@ -1,67 +1,60 @@
 # Step 4: Ground it in approved facts
 
-> **Time:** 15 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
-Until now the curator has been writing from model memory. That is unacceptable for a museum: an
-exhibit label is an institutional claim, and "the model knew it" is not a source.
+Let the educator select approved facts before requesting a draft.
+Continue where you left off from Step 3. You'll register the supplied local tool and request a title, a 100-140-word narrative, and three visitor questions.
 
-In this step the educator supplies the facts and the **application** hands them to the curator
-through a tool it owns. You register the pre-built `approved_fact_lookup` tool, make it the one
-tool the model may call, and write a prompt that orders the curator to call it before writing a
-word. You also let the educator pick one of three approved fact sets or type their own.
+A **local tool** is a function in your application.
+The model sees its description and argument schema, not its source code.
+If the model requests it, the Copilot CLI harness invokes the application function and returns its result to the conversation.
+The function is a capability of the curator agent, not another agent.
 
-## Why the facts belong behind a tool, not inside the prompt
+<figure class="museum-diagram">
+  <img src="{{ASSET_BASE_URL}}museum-fact-tool.svg" width="600" height="685" alt="The educator selects facts. If the model requests approved_fact_lookup, the application returns that list. The Copilot CLI harness sends the result to the model for drafting. The educator still reviews the draft.">
+  <figcaption>Follow the data from the educator to the function, then into the conversation. The model chooses whether to request the tool.</figcaption>
+</figure>
 
-You could paste the fact list into the prompt text. Many applications do. But then the facts are
-just more words in a request the model is free to read loosely, and every run carries the whole
-catalog whether the model needs it or not.
+`approved_fact_lookup` takes no arguments and returns the selected list.
+The helper rejects empty input, more than 20 facts, or facts longer than 500 characters.
+It skips permission for this public, read-only application data.
+That policy would need reconsideration for sensitive data.
 
-A [**local tool**](https://github.com/github/copilot-sdk/blob/main/docs/getting-started.md#how-tools-work)
-is different. It runs inside your process, your code decides what it returns, and the transcript
-records the moment the model asked for it. `approved_fact_lookup` is that tool. It takes no
-arguments and returns the bounded approved fact list, so two runs on the same fact set ask the same
-question and get the same answer — grounding stays deterministic.
+## Two settings and one request
 
-The helpers already own the tool and the bounds. `boundFacts` trims every fact, drops blanks, and
-rejects the batch when it is empty, longer than 20 facts, or contains a fact over 500 characters.
-The tool factory applies those bounds to whatever it is given, so the model can never be handed an
-unbounded list. Bounds are not politeness: an unbounded fact list is unpredictable cost, latency,
-and attack surface.
+`tools` registers the implementation. `availableTools` exposes its name through an explicit allowlist.
+The prompt asks: Call `approved_fact_lookup` first.
+That request does not guarantee a call.
 
-`skip permission` is set on this tool because it only reads application-owned data that the
-educator just approved on screen. The external Wikipedia process in Step 7 gets a permission
-boundary instead.
-
-This is the museum equivalent of `accessibility_rule_lookup` in the accessibility track: one
-zero-argument, application-owned local tool that hands the model curated data it cannot otherwise
-reach.
-
-## Two lists, two different jobs
-
-Registering a tool takes two settings, and confusing them is the most common mistake in this
-workshop:
-
-- **`tools`** carries the *implementation*. This is where the runtime learns that a function called
-  `approved_fact_lookup` exists and how to execute it.
-- **`availableTools`** is the *allowlist*. It names which tools the model is permitted to call in
-  this session. A tool that is registered but not allowlisted cannot be called.
-
-You need both. Step 5 returns to the allowlist and shows what it prevents.
-
-The prompt is the third piece, and it is the weakest one: it *asks* the model to call the tool. It
-does not make the call happen, and it cannot stop a call. Keep the explicit "call
-`approved_fact_lookup` first" instruction — at this stage you want the tool call to be reliable so
-you can see it.
+The tool's result is deterministic for a given list. The model's draft is not.
+Compare its claims with the facts, even after a successful call.
+For a small list, putting facts directly in the prompt would also be reasonable.
+This tool teaches data ownership and observable invocation.
 
 ## Register the tool and build the prompt
 
-:::language dotnet
-Open `Program.cs`. Widen nothing at the top — you already have
-`using MuseumExhibitStudio.Helpers;`. Replace everything from the first `Console.WriteLine` to the
-end of the file:
+First, add these sentences after the audience and tone paragraph in your curator system message.
+They name the source the educator approves:
 
+<!-- code-id: museum-04-approved-facts-shared-1 -->
+```text
+Use only facts supplied by this application. Call the approved fact tool the
+application provides and treat what it returns as the complete source of truth
+for the current exhibit. Do not add facts from memory or outside knowledge.
+```
+
+Finish the following edits before running the application.
+They connect the instructions, the tool, and its selected data.
+
+:::language dotnet
+Open `Program.cs`.
+Keep `using MuseumExhibitStudio.Helpers;` at the top.
+Keep the system message, including the facts guidance you just added.
+Replace everything from the first `Console.WriteLine` through the end of the file with the following code:
+
+<!-- code-id: museum-04-approved-facts-dotnet-1 -->
 ```csharp
 Console.WriteLine("=== Museum Exhibit Studio ===");
 Console.WriteLine();
@@ -95,7 +88,8 @@ await client.StartAsync();
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
     ClientName = "museum-exhibit-studio",
-    OnPermissionRequest = PermissionHandler.ApproveAll,
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("This session does not allow unexpected permission requests.")),
     Streaming = true,
     Tools = [CuratorFacts.CreateApprovedFactLookup(approvedFacts)],
     AvailableTools = [CuratorFacts.ApprovedFactLookupName],
@@ -108,7 +102,6 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
 
 await CuratorStreamer.StreamExhibitAsync(session, BuildExhibitPrompt());
 
-await client.StopAsync();
 CuratorTerminal.CloseTerminal();
 
 CuratorFactSet ReadFactSetSelection()
@@ -148,22 +141,16 @@ static string BuildExhibitPrompt()
 }
 ```
 
-Local functions come after the top-level statements. `BuildExhibitPrompt` takes no facts at all now
-— it names the tool instead. `CreateApprovedFactLookup` calls `BoundFacts` internally, so the bound
-holds no matter who builds the tool.
-
-**Look inside:** `Helpers/CuratorFacts.cs` holds all of this, and it is worth reading because it is
-a real tool definition rather than plumbing. `CreateApprovedFactLookup` closes over the bounded
-list the educator just approved and registers it through `CopilotTool.DefineTool` under the name
-`approved_fact_lookup`. The handler takes no parameters, so the model cannot steer what comes back
-— it asks, and it receives exactly that list. `SkipPermission = true` is set right there because
-the data is application-owned. The three fact sets and the `MaximumFactCount` (20) and
-`MaximumFactLength` (500) bounds enforced by `BoundFacts` are in the same file.
+Open `Helpers/CuratorFacts.cs`.
+Find `CuratorFacts.CreateApprovedFactLookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `CuratorFacts.BoundFacts` to check their limits.
 :::
 
 :::language nodejs
-Open `src/index.ts` and widen the helper import:
+Open `src/index.ts`.
+Replace its import from `./curator.js` with this list of supplied functions:
 
+<!-- code-id: museum-04-approved-facts-nodejs-1 -->
 ```typescript
 import {
   approvedFactLookupName,
@@ -180,6 +167,7 @@ import {
 
 Add the prompt builder and the fact-set chooser below the system message:
 
+<!-- code-id: museum-04-approved-facts-nodejs-2 -->
 ```typescript
 function buildExhibitPrompt(): string {
   return `Create visitor-facing exhibit text about this application's approved subject.
@@ -213,8 +201,10 @@ async function chooseFactSet(): Promise<(typeof factSets)[number]> {
 
 Replace `main` with:
 
+<!-- code-id: museum-04-approved-facts-nodejs-3 -->
 ```typescript
 async function main(): Promise<void> {
+  try {
   console.log("=== Museum Exhibit Studio ===");
   console.log();
   console.log("Approved fact sets:");
@@ -232,40 +222,40 @@ async function main(): Promise<void> {
 
   console.log();
   const client = new CopilotClient();
-  await client.start();
-  const session = await client.createSession({
-    clientName: "museum-exhibit-studio",
-    onPermissionRequest: approveAll,
-    streaming: true,
-    tools: [createApprovedFactLookup(approvedFacts)],
-    availableTools: [approvedFactLookupName],
-    systemMessage: { mode: "replace", content: systemMessage },
-  });
-
-  await streamExhibit(session, buildExhibitPrompt());
-
-  await session.disconnect();
-  await client.stop();
-  closeTerminal();
+  try {
+    await client.start();
+    const session = await client.createSession({
+      clientName: "museum-exhibit-studio",
+      onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
+      streaming: true,
+      tools: [createApprovedFactLookup(approvedFacts)],
+      availableTools: [approvedFactLookupName],
+      systemMessage: { mode: "replace", content: systemMessage },
+    });
+    try {
+      await streamExhibit(session, buildExhibitPrompt());
+    } finally {
+      await session.disconnect();
+    }
+  } finally {
+    await client.stop();
+  }
+  } finally {
+    closeTerminal();
+  }
 }
 ```
 
-`buildExhibitPrompt` takes no facts at all now — it names the tool instead.
-`createApprovedFactLookup` calls `boundFacts` internally, so the bound holds no matter who builds
-the tool.
-
-**Look inside:** `src/curator.ts` holds all of this, and it is worth reading because it is a real
-`defineTool` definition rather than plumbing. `createApprovedFactLookup` closes over the bounded
-list the educator just approved and defines `approved_fact_lookup` with
-`parameters: { type: "object", properties: {}, additionalProperties: false }`, so the model cannot
-steer what comes back — it asks, and it receives exactly that list. `skipPermission: true` is set
-right there because the data is application-owned. The three fact sets and the `maximumFactCount`
-(20) and `maximumFactLength` (500) bounds enforced by `boundFacts` are in the same file.
+Open `src/curator.ts`.
+Find `createApprovedFactLookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `boundFacts` to check their limits.
 :::
 
 :::language python
-Open `main.py` and widen the helper import:
+Open `main.py`.
+Replace its import from `curator` with this list of supplied functions:
 
+<!-- code-id: museum-04-approved-facts-python-1 -->
 ```python
 from curator import (
     APPROVED_FACT_LOOKUP_NAME,
@@ -281,6 +271,7 @@ from curator import (
 
 Add the prompt builder below `SYSTEM_MESSAGE`:
 
+<!-- code-id: museum-04-approved-facts-python-2 -->
 ```python
 def build_exhibit_prompt() -> str:
     return f"""Create visitor-facing exhibit text about this application's approved subject.
@@ -304,6 +295,7 @@ conclusion, software discussion, or facts the tool did not return."""
 
 Replace `main`:
 
+<!-- code-id: museum-04-approved-facts-python-3 -->
 ```python
 async def main() -> None:
     print("=== Museum Exhibit Studio ===")
@@ -328,7 +320,7 @@ async def main() -> None:
     async with CopilotClient() as client:
         async with await client.create_session(
             client_name="museum-exhibit-studio",
-            on_permission_request=PermissionHandler.approve_all,
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(feedback="This session does not allow that permission request."),
             streaming=True,
             tools=[create_approved_fact_lookup(facts)],
             available_tools=[APPROVED_FACT_LOOKUP_NAME],
@@ -337,23 +329,17 @@ async def main() -> None:
             await stream_exhibit(session, build_exhibit_prompt())
 ```
 
-`build_exhibit_prompt` takes no facts at all now — it names the tool instead.
-`create_approved_fact_lookup` calls `bound_facts` internally, so the bound holds no matter who
-builds the tool.
-
-**Look inside:** `curator.py` holds all of this, and it is worth reading because it is a real
-`@define_tool` definition rather than plumbing. `create_approved_fact_lookup` closes over the
-bounded list the educator just approved and decorates a nested `approved_fact_lookup()` that takes
-no arguments, so the model cannot steer what comes back — it asks, and it receives exactly that
-list. `skip_permission=True` is set right there because the data is application-owned. The three
-fact sets and the `MAXIMUM_FACT_COUNT` (20) and `MAXIMUM_FACT_LENGTH` (500) bounds enforced by
-`bound_facts` are in the same file.
+Open `curator.py`.
+Find `create_approved_fact_lookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `bound_facts` to check their limits.
 :::
 
 :::language go
-Open `main.go`. Add `"strconv"` to the import block, then add the prompt builder
-below the system message:
+Open `main.go`.
+Add `"strconv"` to the imports for parsing the educator's numbered choice.
+Add the prompt builder below the system message:
 
+<!-- code-id: museum-04-approved-facts-go-1 -->
 ```go
 func buildExhibitPrompt() string {
 	return fmt.Sprintf(`Create visitor-facing exhibit text about this application's approved subject.
@@ -376,10 +362,18 @@ conclusion, software discussion, or facts the tool did not return.`, ApprovedFac
 }
 ```
 
-Replace `main`:
+Replace the `main` wrapper and its `run` function together with the following code:
 
+<!-- code-id: museum-04-approved-facts-go-2 -->
 ```go
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	fmt.Println("=== Museum Exhibit Studio ===")
 	fmt.Println()
 	fmt.Println("Approved fact sets:")
@@ -403,61 +397,59 @@ func main() {
 	if !AskYesNo("Use these facts?", true) {
 		facts = ReadFacts()
 	}
-	facts, err := BoundFacts(facts)
+	facts, err = BoundFacts(facts)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	lookup, err := ApprovedFactLookup(facts)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	fmt.Println()
 	ctx := context.Background()
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(ctx); err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = client.Stop() }()
 
 	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		ClientName:          "museum-exhibit-studio",
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
-		Streaming:           copilot.Bool(true),
-		Tools:               []copilot.Tool{lookup},
-		AvailableTools:      []string{ApprovedFactLookupName},
+		ClientName: "museum-exhibit-studio",
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
+		Streaming:      copilot.Bool(true),
+		Tools:          []copilot.Tool{lookup},
+		AvailableTools: []string{ApprovedFactLookupName},
 		SystemMessage: &copilot.SystemMessageConfig{
 			Mode:    "replace",
 			Content: systemMessage,
 		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = session.Disconnect() }()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	if _, err := StreamExhibit(session, buildExhibitPrompt(), GenerationTimeout); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 
-`buildExhibitPrompt` takes no facts at all now — it names the tool instead. `ApprovedFactLookup`
-calls `BoundFacts` internally, so the bound holds no matter who builds the tool.
-
-**Look inside:** `curator.go` holds all of this, and it is worth reading because it is a real
-`copilot.DefineTool` definition rather than plumbing. `ApprovedFactLookup` closes over the bounded
-list the educator just approved and defines a handler whose argument type is `struct{}`, so the
-model cannot steer what comes back — it asks, and it receives exactly that list.
-`lookup.SkipPermission = true` is set right there because the data is application-owned. The three
-fact sets and the `MaximumFactCount` (20) and `MaximumFactLength` (500) bounds enforced by
-`BoundFacts` are in the same file.
+Open `curator.go`.
+Find `ApprovedFactLookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `BoundFacts` to check their limits.
 :::
 
 :::language rust
-Open `src/main.rs` and widen the crate import:
+Open `src/main.rs`.
+Replace the `museum_exhibit_studio` import with this list of supplied names:
 
+<!-- code-id: museum-04-approved-facts-rust-1 -->
 ```rust
 use museum_exhibit_studio::{
     APPROVED_FACT_LOOKUP_NAME, GENERATION_TIMEOUT, RuntimeError, approved_fact_lookup, ask_line,
@@ -467,6 +459,7 @@ use museum_exhibit_studio::{
 
 Add the prompt builder below `SYSTEM_MESSAGE`:
 
+<!-- code-id: museum-04-approved-facts-rust-2 -->
 ```rust
 fn build_exhibit_prompt() -> String {
     format!(
@@ -493,6 +486,7 @@ conclusion, software discussion, or facts the tool did not return."#
 
 Replace `main`:
 
+<!-- code-id: museum-04-approved-facts-rust-3 -->
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), RuntimeError> {
@@ -528,8 +522,7 @@ async fn main() -> Result<(), RuntimeError> {
     let facts = bound_facts(facts)?;
 
     println!();
-    let client = Client::start(ClientOptions::default()).await?;
-    let mut config = SessionConfig::default().with_permission_handler(permission::approve_all());
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
     config.client_name = Some("museum-exhibit-studio".to_owned());
     config.streaming = Some(true);
     config.tools = Some(vec![approved_fact_lookup(&facts)?]);
@@ -539,34 +532,47 @@ async fn main() -> Result<(), RuntimeError> {
             .with_mode("replace")
             .with_content(SYSTEM_MESSAGE),
     );
-    let session = client.create_session(config).await?;
 
-    stream_exhibit(&session, build_exhibit_prompt(), GENERATION_TIMEOUT).await?;
-
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let client = Client::start(ClientOptions::default()).await?;
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = async {
+            stream_exhibit(&session, build_exhibit_prompt(), GENERATION_TIMEOUT).await?;
+            Ok::<(), RuntimeError>(())
+        }
+        .await;
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as RuntimeError);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as RuntimeError);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 
-`build_exhibit_prompt` takes no facts at all now — it names the tool instead.
-`approved_fact_lookup` calls `bound_facts` internally, so the bound holds no matter who builds the
-tool.
-
-**Look inside:** `src/lib.rs` holds all of this, and it is worth reading because it is a real tool
-definition rather than plumbing. `approved_fact_lookup` closes over the bounded list the educator
-just approved and builds a `Tool` whose parameter schema is
-`{"type": "object", "properties": {}, "additionalProperties": false}`, so the model cannot steer
-what comes back — it asks, and it receives exactly that list. `.with_skip_permission(true)` is set
-right there because the data is application-owned. The three fact sets and the
-`MAXIMUM_FACT_COUNT` (20) and `MAXIMUM_FACT_LENGTH` (500) bounds enforced by `bound_facts` are in
-the same file.
+Open `src/lib.rs`.
+Find `approved_fact_lookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `bound_facts` to check their limits.
 :::
 
 :::language java
-Open `src/main/java/workshop/MuseumExhibitStudio.java`. Add
-`import java.util.List;` to the imports, then add the prompt builder to the class:
+Open `src/main/java/workshop/MuseumExhibitStudio.java`.
+Keep the `java.util.List` import from the earlier lesson.
+Add the prompt builder and fact-selection method inside the class, after the system message:
 
+<!-- code-id: museum-04-approved-facts-java-1 -->
 ```java
     public static String buildExhibitPrompt() {
         return """
@@ -606,6 +612,7 @@ Open `src/main/java/workshop/MuseumExhibitStudio.java`. Add
 
 Replace `main`:
 
+<!-- code-id: museum-04-approved-facts-java-2 -->
 ```java
     public static void main(String[] args) throws Exception {
         System.out.println("=== Museum Exhibit Studio ===");
@@ -632,20 +639,17 @@ Replace `main`:
         System.out.println();
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(new SessionConfig()
+            try (var session = client.createSession(new SessionConfig()
                     .setClientName("museum-exhibit-studio")
-                    .setOnPermissionRequest(PermissionHandler.APPROVE_ALL)
+                    .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")))
                     .setStreaming(true)
                     .setTools(List.of(CuratorFacts.approvedFactLookup(facts)))
                     .setAvailableTools(List.of(CuratorFacts.APPROVED_FACT_LOOKUP_NAME))
                     .setSystemMessage(new SystemMessageConfig()
                             .setMode(SystemMessageMode.REPLACE)
-                            .setContent(SYSTEM_MESSAGE))).get();
-            try {
+                            .setContent(SYSTEM_MESSAGE))).get()) {
                 CuratorStreamer.streamExhibit(session, buildExhibitPrompt());
-            } finally {
-                session.close();
-                client.stop().get();
             }
         } finally {
             CuratorTerminal.close();
@@ -653,16 +657,9 @@ Replace `main`:
     }
 ```
 
-`buildExhibitPrompt` takes no facts at all now — it names the tool instead. `approvedFactLookup`
-calls `boundFacts` internally, so the bound holds no matter who builds the tool.
-
-**Look inside:** `CuratorFacts.java` holds all of this, and it is worth reading because it is a
-real `ToolDefinition` rather than plumbing. `approvedFactLookup` builds a private
-`ApprovedFactReader` over the bounded list the educator just approved and binds its no-argument
-`read` method, so the model cannot steer what comes back — it asks, and it receives exactly that
-list. `.skipPermission(true)` is set right there because the data is application-owned. The three
-fact sets and the `MAXIMUM_FACT_COUNT` (20) and `MAXIMUM_FACT_LENGTH` (500) bounds enforced by
-`boundFacts` are in the same file.
+Open `src/main/java/workshop/CuratorFacts.java`.
+Find `CuratorFacts.approvedFactLookup`, the supplied function that creates the local tool.
+It receives the selected facts and calls `CuratorFacts.boundFacts` to check their limits.
 :::
 
 ## Run it
@@ -678,9 +675,18 @@ npm start
 ```
 :::
 :::language python
-```bash
-.venv/bin/python main.py
-```
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Run the Python museum application">
+    <button type="button" role="tab" aria-selected="true" data-tab="run-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="run-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="run-python-windows">
+    <pre><code class="language-powershell">.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="run-python-unix" hidden>
+    <pre><code class="language-bash">.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 :::
 :::language go
 ```bash
@@ -698,9 +704,11 @@ mvn compile exec:java
 ```
 :::
 
-The application now interviews you before it writes anything, and the curator visibly fetches its
-facts before it writes a word:
+Choose a fact set when the application asks.
+Review the printed facts and accept them for this run.
+The following example shows a tool call followed by a draft:
 
+<!-- code-id: museum-04-approved-facts-shared-2 -->
 ```text
 === Museum Exhibit Studio ===
 
@@ -728,43 +736,39 @@ Off the Queensland coast, more than two thousand nine hundred reefs...
 1. ...
 ```
 
-The `[tool:start] approved_fact_lookup` line is the whole point of this step. The curator did not
-recall the reef — it asked your application for the facts, and your application answered.
+The `[tool:start] approved_fact_lookup` line identifies a requested call.
+The completion line reports its result.
+These events distinguish a retrieved list from a plausible answer that used no tool.
 
-## Prove the tool is doing the work
+## Compare the tool result with the draft
 
-Run it again and choose set 1 or 3. The exhibit changes subject completely, and the tool event
-appears again each time. Nothing in the prompt changed between those runs: the same prompt text
-produced a Terracotta Army exhibit because the tool returned different data. That is the difference
-between a prompt that carries data and an application that owns it.
+Run again with another supplied fact set.
+The prompt stays the same, but the tool now holds different data.
+Look for a tool call and compare each draft with the selected list.
+If the model does not call the tool, do not treat its draft as evidence that retrieval worked.
 
-Then answer `n` at the confirmation, type two or three facts of your own, and submit a blank line.
-The curator writes about your subject instead — your typed facts went into the tool, and the tool
-handed them back to the model.
+To try another subject, answer `n` at the confirmation.
+Enter two or three public sample facts, then submit a blank line.
+Check the returned subject and claims against your input.
 
-Try the failure case too. Answer `n` and immediately submit a blank line without typing any facts.
-The run stops with `Provide at least one approved fact.` — the tool factory refused to be built
-around an empty list, so no request was ever sent. Step 5 turns that crash into a civil error
-message.
+For the input failure case, answer `n` and submit a blank line without entering facts.
+The application reports `Provide at least one approved fact.`
+It rejects the empty list before sending a generation request.
+Step 5 gives these failures a consistent reporting path.
 
 ## Check your understanding
 
-- You registered the tool in two places. What would happen if you put `approved_fact_lookup` in the
-  tool list but left it out of the allowlist?
-- The prompt says "Call `approved_fact_lookup` first." Does that sentence guarantee the call
-  happens? What in this step made the tool *available* to be called at all?
-- The tool takes no arguments and always returns the same bounded list for a given fact set. What
-  would you lose if it took a free-text query argument instead?
-- The output structure is requested in the prompt. What has actually verified that the model
-  followed it so far?
+Which setting registers the tool, which exposes it, and which asks the model to use it?
+
+<details>
+<summary>Check your answer</summary>
+
+The tool list registers its implementation. The allowlist exposes its name. The prompt requests a call but does not guarantee one.
+
+</details>
 
 ## Learn more
 
-- [Working with hooks](https://github.com/github/copilot-sdk/blob/main/docs/features/hooks.md):
-  callbacks the runtime invokes around each tool call, for auditing or policy your code owns.
-- [Post-tool-use hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/post-tool-use.md):
-  inspecting or rewriting what a tool returned before the model reads it.
-- [Context clearing and terminal tools](https://github.com/github/copilot-sdk/blob/main/docs/features/context-management.md):
-  what a tool can do to the conversation itself, and why most tools should not.
+Optional reference: [Working with hooks](https://github.com/github/copilot-sdk/blob/main/docs/features/hooks.md).
 
 Continue to [Set the guardrails](museum-05-guardrails.md).

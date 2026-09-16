@@ -4,7 +4,10 @@ import asyncio
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
+import os
 import re
+import stat
 from typing import Any
 
 from copilot import CopilotSession, MCPStdioServerConfig, define_tool
@@ -25,6 +28,42 @@ MAXIMUM_FACT_LENGTH = 500
 EXHIBIT_FILE_NAME = "exhibit.html"
 APPROVED_FACT_LOOKUP_NAME = "approved_fact_lookup"
 WIKIPEDIA_TOOLS = ["wikipedia-search", "wikipedia-readArticle"]
+
+
+def deny_unexpected_permission(_request: Any, _invocation: Any) -> PermissionDecision:
+    return PermissionDecisionReject(feedback="This session does not allow that permission request.")
+
+
+@dataclass(frozen=True)
+class ArtifactState:
+    path: Path
+    fingerprint: str | None
+
+
+def _artifact_fingerprint(path: Path) -> str | None:
+    try:
+        details = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(details.st_mode):
+        raise ValueError("The output must be a regular file, not a directory or symbolic link.")
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "rb") as output:
+        if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
+            raise ValueError("The output must be a regular file.")
+        content = output.read()
+    return hashlib.sha256(content).hexdigest() if content else ""
+
+
+def capture_artifact_state(working_directory: str, file_name: str) -> ArtifactState:
+    path = Path(os.path.abspath(os.path.join(working_directory, file_name)))
+    return ArtifactState(path, _artifact_fingerprint(path))
+
+
+def verify_artifact_update(before: ArtifactState) -> None:
+    fingerprint = _artifact_fingerprint(before.path)
+    if not fingerprint or fingerprint == before.fingerprint:
+        raise ValueError(f"No output update was verified for {before.path}. Review any existing file.")
 
 apollo11_facts = (
     "Apollo 11 launched July 16, 1969.",
@@ -201,9 +240,11 @@ async def stream_exhibit(
                 received_delta = True
                 chunks.append(delta)
                 print(delta, end="", flush=True)
-            case AssistantMessageData(content=content) if content and not received_delta:
-                chunks.append(content)
-                print(content, end="", flush=True)
+            case AssistantMessageData(content=content):
+                if content and not received_delta:
+                    chunks.append(content)
+                    print(content, end="", flush=True)
+                received_delta = False
             case ToolExecutionStartData(tool_name=name):
                 print(f"\n[tool:start] {name}")
             case ToolExecutionCompleteData(success=success):
@@ -217,9 +258,10 @@ async def stream_exhibit(
 
     unsubscribe = session.on(on_event)
     try:
-        await session.send(prompt)
         try:
-            await asyncio.wait_for(done.wait(), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                await session.send(prompt)
+                await done.wait()
         except TimeoutError as timeout_error:
             raise TimeoutError("session response timeout") from timeout_error
         if error is not None:

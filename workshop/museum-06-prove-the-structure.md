@@ -1,40 +1,31 @@
 # Step 6: Prove the structure
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
-A PASS/FAIL report printed under every exhibit. Two lines of new code: capture the text the session
-runner already returned, then hand it to the pre-built validator.
+Check whether the draft follows the educator's requested format.
+Continue where you left off from Step 5. You'll retain the runner's returned text and pass it to the supplied validator.
 
-## What deterministic checks can and cannot prove
+The validator uses ordinary code to check the title, narrative length, three numbered questions, question marks, and selected prohibited vocabulary.
+The same text receives the same result.
+These **structural checks** do not prove factual accuracy.
 
-The validator in the helper module is ordinary code with no model in it. Given the same text it
-always returns the same verdict. It checks:
+The validator is a function with fixed rules, not an agent.
 
-- exactly one level-one title
-- a `## Narrative` section
-- a narrative of 100–140 words
-- a `## Visitor questions` section with exactly three numbered items
-- every numbered item ending in a question mark
-- no prohibited vocabulary (`software`, `codebase`, `repository`, `terminal`, `GitHub Copilot`)
-
-That is a **structural** contract, and it is genuinely enforceable. It is not a **factual** one.
-A perfectly structured exhibit can still contain a claim no approved fact supports. The report ends
-by saying so, and that sentence is the honest boundary of this application:
-
-```text
-Structural checks do not prove factual grounding. Unsupported claims require human review or a separate evaluator.
-```
-
-You are not writing the validator. Learning to *react* to a machine verdict — and to know exactly
-what it does not cover — is the lesson.
+The report is advisory: a failed format check does not stop this editing workflow.
+The educator still compares the draft with the approved facts.
 
 ## Wire the validator
+
+The runner already returns the complete text.
+Store that return value, call the validator, and print its report.
+Keep the existing error handling around this work.
 
 :::language dotnet
 Open `Program.cs`. Capture the returned exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-dotnet-1 -->
 ```csharp
     Console.WriteLine();
     var exhibit = await RunSessionAsync(
@@ -51,18 +42,17 @@ Open `Program.cs`. Capture the returned exhibit and print the report:
 `CuratorValidation` is already in the `MuseumExhibitStudio.Helpers` namespace you imported in
 Step 2, so there is nothing new to add at the top of the file.
 
-**Look inside:** `Helpers/CuratorValidation.cs` is the concrete answer to "the application proves
-this, not the model". `ValidateExhibit` splits the text into lines, counts `TitlePattern` matches,
-locates the `## Narrative` and `## Visitor questions` headings, counts narrative words with
-`WordPattern`, collects numbered items with `QuestionPattern`, and scans the whole text for the
-five terms in `ProhibitedVocabulary`. Each failed rule appends a plain sentence to `Errors`, and
-`FormatValidation` renders those into the report you print. No model is involved at any point.
+Open `Helpers/CuratorValidation.cs`.
+Find `CuratorValidation.ValidateExhibit` and `CuratorValidation.FormatValidation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 :::language nodejs
 Open `src/index.ts`. Add `formatValidation` and `validateExhibit` to the helper
 import, then capture the returned exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-nodejs-1 -->
 ```typescript
     console.log();
     const exhibit = await runSession(
@@ -75,20 +65,18 @@ import, then capture the returned exhibit and print the report:
     console.log(formatValidation(validateExhibit(exhibit)));
 ```
 
-**Look inside:** `src/curator.ts` is the concrete answer to "the application proves this, not the
-model". `validateExhibit` splits the text into lines, counts `titlePattern` matches, locates the
-`## Narrative` and `## Visitor questions` headings, counts narrative words with `wordPattern`,
-collects numbered items with `questionPattern`, and scans the whole text for the five terms in
-`prohibitedVocabulary`. Each failed rule appends a plain sentence to `errors`, and
-`formatValidation` renders those into the report you print. No model is involved at any point.
+Open `src/curator.ts`.
+Find `validateExhibit` and `formatValidation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 :::language python
 Open `main.py`. Add `format_validation` and `validate_exhibit` to the helper
 import, then capture the returned exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-python-1 -->
 ```python
-    try:
         print()
         exhibit = await run_session(
             generation_config(facts),
@@ -101,17 +89,16 @@ import, then capture the returned exhibit and print the report:
         return 0
 ```
 
-**Look inside:** `curator.py` is the concrete answer to "the application proves this, not the
-model". `validate_exhibit` splits the text into lines, counts `_TITLE_PATTERN` matches, locates the
-`## Narrative` and `## Visitor questions` headings, counts narrative words with `_WORD_PATTERN`,
-collects numbered items with `_QUESTION_PATTERN`, and scans the whole text for the five terms in
-`PROHIBITED_VOCABULARY`. Each failed rule appends a plain sentence to `errors`, and
-`format_validation` renders those into the report you print. No model is involved at any point.
+Open `curator.py`.
+Find `validate_exhibit` and `format_validation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 :::language go
 Open `main.go`. Capture the returned exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-go-1 -->
 ```go
 	fmt.Println()
 	exhibit, err := runSession(ctx, exhibitConfig, buildExhibitPrompt(), GenerationTimeout)
@@ -127,18 +114,17 @@ Open `main.go`. Capture the returned exhibit and print the report:
 `FormatValidation` and `ValidateExhibit` live in `curator.go` in the same package, so there is no
 import to add.
 
-**Look inside:** `curator.go` is the concrete answer to "the application proves this, not the
-model". `ValidateExhibit` splits the text into lines, counts title-pattern matches, locates the
-`## Narrative` and `## Visitor questions` headings, counts narrative words, collects numbered
-items, and scans the lowercased text for the five terms in `prohibitedVocabulary`. Each failed rule
-appends a plain sentence to `validation.Errors`, and `FormatValidation` renders those into the
-report you print. No model is involved at any point.
+Open `curator.go`.
+Find `ValidateExhibit` and `FormatValidation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 :::language rust
 Open `src/main.rs`. Add `format_validation` and `validate_exhibit` to the crate
 import, then capture the returned exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-rust-1 -->
 ```rust
     println!();
     let exhibit = run_session(
@@ -154,18 +140,17 @@ import, then capture the returned exhibit and print the report:
     Ok(())
 ```
 
-**Look inside:** `src/lib.rs` is the concrete answer to "the application proves this, not the
-model". `validate_exhibit` splits the text into lines, counts title-pattern matches, locates the
-`## Narrative` and `## Visitor questions` headings, counts narrative words, collects numbered
-items, and scans the lowercased text for the five terms in `PROHIBITED_VOCABULARY`. Each failed
-rule pushes a plain sentence onto `errors`, and `format_validation` renders those into the report
-you print. No model is involved at any point.
+Open `src/lib.rs`.
+Find `validate_exhibit` and `format_validation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 :::language java
 Open `src/main/java/workshop/MuseumExhibitStudio.java`. Capture the returned
 exhibit and print the report:
 
+<!-- code-id: museum-06-prove-the-structure-java-1 -->
 ```java
             System.out.println();
             String exhibit = runSession(
@@ -179,12 +164,10 @@ exhibit and print the report:
 
 `CuratorValidation` sits in the same `workshop` package, so there is no import to add.
 
-**Look inside:** `CuratorValidation.java` is the concrete answer to "the application proves this,
-not the model". `validateExhibit` splits the text into lines, counts `TITLE_PATTERN` matches,
-locates the `## Narrative` and `## Visitor questions` headings, counts narrative words with
-`WORD_PATTERN`, collects numbered items with `QUESTION_PATTERN`, and scans the lowercased text for
-the five terms in `PROHIBITED_VOCABULARY`. Each failed rule adds a plain sentence to `errors`, and
-`formatValidation` renders those into the report you print. No model is involved at any point.
+Open `src/main/java/workshop/CuratorValidation.java`.
+Find `CuratorValidation.validateExhibit` and `CuratorValidation.formatValidation`.
+The first receives exhibit text and returns check results.
+The second turns those results into the report you print.
 :::
 
 ## Run it
@@ -200,9 +183,18 @@ npm start
 ```
 :::
 :::language python
-```bash
-.venv/bin/python main.py
-```
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Run the Python museum application">
+    <button type="button" role="tab" aria-selected="true" data-tab="run-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="run-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="run-python-windows">
+    <pre><code class="language-powershell">.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="run-python-unix" hidden>
+    <pre><code class="language-bash">.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 :::
 :::language go
 ```bash
@@ -222,6 +214,7 @@ mvn compile exec:java
 
 The exhibit streams as before, and then a verdict appears under it:
 
+<!-- code-id: museum-06-prove-the-structure-shared-2 -->
 ```text
 Structural checks passed.
 - One level-one title: true
@@ -235,9 +228,10 @@ Structural checks passed.
 Structural checks do not prove factual grounding. Unsupported claims require human review or a separate evaluator.
 ```
 
-A failing run is just as informative, and you will see one eventually — narrative length is the
-usual culprit:
+A failing run is informative too. For example, a narrative outside the requested word range would
+produce a report like this:
 
+<!-- code-id: museum-06-prove-the-structure-shared-3 -->
 ```text
 Structural checks found issues:
 - One level-one title: true
@@ -252,34 +246,114 @@ Structural checks found issues:
 Structural checks do not prove factual grounding. Unsupported claims require human review or a separate evaluator.
 ```
 
-The run still exits successfully. That is deliberate: the report is for a human curator deciding
-whether to publish, not a build gate. Rerun the exhibit, or tighten the fact list, and try again.
+The application still exits successfully when structural checks fail.
+The report advises the educator instead of stopping an editing workflow.
+A publication system could choose to reject a failing draft.
+That would be an application rule, not a stronger prompt.
 
-Force a failure on purpose to see the vocabulary rule fire. Supply your own single fact:
+## Check a fixed example, then change one rule
 
-```text
-The museum's ticketing terminal was installed in 1998.
+Save your entrypoint outside the project before this experiment.
+Temporarily replace only the exhibit-generation assignment with the fixed string below.
+Keep the validation call after it.
+This avoids a model call for the draft and makes its word count predictable.
+
+:::language dotnet
+<!-- code-id: museum-06-fixture-dotnet -->
+```csharp
+var exhibit = "# Test exhibit\n## Narrative\n"
+    + string.Join(" ", Enumerable.Repeat("gallery", 110))
+    + "\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?";
 ```
+:::
+:::language nodejs
+<!-- code-id: museum-06-fixture-nodejs -->
+```typescript
+const exhibit = "# Test exhibit\n## Narrative\n"
+  + "gallery ".repeat(110)
+  + "\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?";
+```
+:::
+:::language python
+<!-- code-id: museum-06-fixture-python -->
+```python
+exhibit = ("# Test exhibit\n## Narrative\n" + "gallery " * 110
+           + "\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?")
+```
+:::
+:::language go
+<!-- code-id: museum-06-fixture-go -->
+```go
+exhibit := "# Test exhibit\n## Narrative\n" + strings.Repeat("gallery ", 110) +
+    "\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?"
+```
+Keep the `strings` import from Step 5.
+Replace the generation assignment and its associated error check together.
+This string assignment cannot return a generation error.
+:::
+:::language rust
+<!-- code-id: museum-06-fixture-rust -->
+```rust
+let exhibit = format!(
+    "# Test exhibit\n## Narrative\n{}\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?",
+    "gallery ".repeat(110)
+);
+```
+:::
+:::language java
+<!-- code-id: museum-06-fixture-java -->
+```java
+String exhibit = "# Test exhibit\n## Narrative\n" + "gallery ".repeat(110)
+        + "\n## Visitor questions\n1. What do you notice?\n2. What would you ask?\n3. What might change?";
+```
+:::
 
-The exhibit will repeat the word `terminal`, and the report flags it — the check reads the output,
-not your intent.
+1. Run the normal command. The fixed text passes.
+2. Replace `gallery` with `terminal` in the repeated-word literal.
+3. Predict the verdict, then run again. The vocabulary rule fails while the word count remains within its limit.
+4. Restore `gallery`.
+5. Remove the third question. Run again to check that the question-count rule fails.
+
+### Try an independent rule
+
+Restore all three questions. Make the third question identical to the first.
+The supplied validator checks count and punctuation, not distinctness, so this example still passes.
+That gap matters: visitors need three different questions, not the same question repeated.
+
+In your entrypoint, add a separate check for duplicate question text.
+Ignore surrounding spaces and letter case when comparing questions.
+Keep the supplied helper unchanged.
+Try your implementation before opening the explanation.
+
+Check a distinct set, an exact duplicate, and a duplicate with different case or surrounding spaces.
+
+<details>
+<summary>Compare your approach</summary>
+
+Extract the three numbered question texts, remove their numbering, normalize whitespace at the
+ends and letter case, then compare the number of unique texts with the number of questions.
+Checking whole numbered lines would miss duplicates because `1.` and `3.` differ. This extra
+rule still cannot tell whether a question is thoughtful or factually supported.
+
+</details>
+
+Keep a copy of your practice change outside the project.
+Restore the saved entrypoint, including real generation, before Step 7.
+The practice rule is separate from the finished reference sample.
 
 ## Check your understanding
 
-- The report says the structure passed. What has it *not* told you about the exhibit?
-- Structural failure does not stop the program. When would making it a hard failure be right, and
-  when would it be wrong?
-- The validator is deterministic. Why does that matter more for a museum than a slightly smarter
-  model-based reviewer would?
+Can a draft pass the structural checks and still be wrong?
+
+<details>
+<summary>Check your answer</summary>
+
+Yes. Format, length, and vocabulary checks do not establish factual grounding. The educator must compare the claims with approved facts.
+
+</details>
 
 ## Learn more
 
-- [User prompt submitted hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/user-prompt-submitted.md):
-  checking or rejecting a prompt in code before the runtime sends it.
-- [User prompt transformed hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/user-prompt-transformed.md):
-  reading the model-facing prompt the runtime actually built.
-- [Hooks overview](https://github.com/github/copilot-sdk/blob/main/docs/hooks/hooks-overview.md):
-  where each hook sits in a turn, if you want a check the runtime enforces rather than one you run
-  afterwards.
+Optional reference: [User prompt submitted hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/user-prompt-submitted.md).
 
 Continue to [Research with Wikipedia MCP](museum-07-wikipedia-research.md).

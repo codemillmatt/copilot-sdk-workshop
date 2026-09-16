@@ -2,6 +2,8 @@ using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 using MuseumExhibitStudio.Helpers;
 
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
+
 const string SystemMessage = """
     You are an interpretive museum exhibit curator.
 
@@ -51,7 +53,8 @@ try
         approvedFacts = CuratorFacts.BoundFacts(CuratorTerminal.ReadFacts());
     }
 
-    var consultedSources = Array.Empty<ResearchSource>();
+    var modelReportedSources = Array.Empty<ResearchSource>();
+    var researchCompleted = false;
     if (CuratorTerminal.AskYesNo("Research the subject on Wikipedia first?", defaultYes: false))
     {
         Console.WriteLine();
@@ -61,7 +64,8 @@ try
                 ResearchConfig(),
                 BuildResearchPrompt(approvedFacts),
                 CuratorStreamer.ResearchTimeout);
-            consultedSources = CuratorSafety.ExtractSources(researchNotes).Sources.ToArray();
+            modelReportedSources = CuratorSafety.ExtractSources(researchNotes).Sources.ToArray();
+            researchCompleted = true;
             Console.WriteLine("Research notes are background for you only. They are not added to the approved facts.");
         }
         catch (Exception exception)
@@ -79,11 +83,16 @@ try
     Console.WriteLine();
     Console.WriteLine(CuratorValidation.FormatValidation(CuratorValidation.ValidateExhibit(exhibit)));
 
-    if (consultedSources.Length > 0)
+    if (researchCompleted)
     {
         Console.WriteLine();
-        Console.WriteLine("Consulted Wikipedia sources:");
-        foreach (var source in consultedSources)
+        Console.WriteLine("Model-reported Wikipedia sources (unverified):");
+        Console.WriteLine("Verify each URL, article, and supporting claim yourself; parsed links do not prove consultation.");
+        if (modelReportedSources.Length == 0)
+        {
+            Console.WriteLine("Research completed, but no parseable citations were returned.");
+        }
+        foreach (var source in modelReportedSources)
         {
             Console.WriteLine($"- {source.Title}: {source.Url}");
         }
@@ -92,11 +101,14 @@ try
     Console.WriteLine();
     if (CuratorTerminal.AskYesNo("Generate an interactive exhibit.html?", defaultYes: false))
     {
+        var workingDirectory = Directory.GetCurrentDirectory();
+        var artifact = CuratorSafety.CaptureArtifactState(workingDirectory, CuratorSafety.ExhibitFileName);
         await RunSessionAsync(
-            HtmlConfig(Directory.GetCurrentDirectory()),
+            HtmlConfig(workingDirectory),
             BuildHtmlPrompt(exhibit),
             CuratorStreamer.GenerationTimeout);
-        Console.WriteLine("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+        CuratorSafety.VerifyArtifactUpdate(artifact);
+        Console.WriteLine("Verified a new or changed exhibit.html. Review its content, HTML, and accessibility before use.");
     }
 
     return 0;
@@ -126,7 +138,8 @@ SessionConfig GenerationConfig(IEnumerable<string?> approvedFacts) => new()
 {
     ClientName = "museum-exhibit-studio",
     Model = SelectedModel(),
-    OnPermissionRequest = PermissionHandler.ApproveAll,
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("Generation allows only the permission-free approved fact tool.")),
     Tools = [CuratorFacts.CreateApprovedFactLookup(approvedFacts)],
     AvailableTools = [CuratorFacts.ApprovedFactLookupName],
     Streaming = true,
@@ -159,6 +172,7 @@ static SessionConfig HtmlConfig(string workingDirectory) => new()
 {
     ClientName = "museum-exhibit-studio-html",
     Model = SelectedModel(),
+    WorkingDirectory = workingDirectory,
     AvailableTools = ["builtin:apply_patch"],
     OnPermissionRequest = CuratorSafety.ExhibitWritePermission(workingDirectory),
     Streaming = true
@@ -167,22 +181,15 @@ static SessionConfig HtmlConfig(string workingDirectory) => new()
 static async Task<string> RunSessionAsync(SessionConfig config, string prompt, TimeSpan timeout)
 {
     await using var client = new CopilotClient();
-    try
+    await client.StartAsync();
+    await using var session = await client.CreateSessionAsync(config);
+    var content = await CuratorStreamer.StreamExhibitAsync(session, prompt, timeout);
+    if (string.IsNullOrWhiteSpace(content))
     {
-        await client.StartAsync();
-        await using var session = await client.CreateSessionAsync(config);
-        var content = await CuratorStreamer.StreamExhibitAsync(session, prompt, timeout);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new InvalidOperationException("The curator returned no exhibit content.");
-        }
+        throw new InvalidOperationException("The curator returned no exhibit content.");
+    }
 
-        return content;
-    }
-    finally
-    {
-        await client.StopAsync();
-    }
+    return content;
 }
 
 static CuratorFactSet ReadFactSetSelection()

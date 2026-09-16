@@ -5,7 +5,7 @@
 # Everything below is yours to write, one lesson at a time.
 #
 # Step 1  First curator session .......... create the CopilotClient, create a session with
-#                                          on_permission_request=PermissionHandler.approve_all so
+#                                          on_permission_request=a reject handler with no tools exposed so
 #                                          requests get an answer, send a prompt, print the reply,
 #                                          then disconnect and stop.
 # Step 2  Stream the curator ............. swap the blocking send for stream_exhibit() so tokens

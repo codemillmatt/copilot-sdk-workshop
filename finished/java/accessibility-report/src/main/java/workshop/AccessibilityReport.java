@@ -2,8 +2,6 @@ package workshop;
 
 import com.github.copilot.CopilotClient;
 import com.github.copilot.rpc.McpStdioServerConfig;
-import com.github.copilot.rpc.MessageOptions;
-import com.github.copilot.rpc.PermissionRequestResult;
 import com.github.copilot.rpc.SessionConfig;
 import com.github.copilot.rpc.ToolDefinition;
 import com.github.copilot.tool.Param;
@@ -25,20 +23,16 @@ import java.util.stream.Stream;
 
 public final class AccessibilityReport {
     private static final long MAX_SNAPSHOT_BYTES = 1_000_000;
-    private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
 
     private AccessibilityReport() {
     }
 
     public static void main(String[] args) throws Exception {
-        RunOptions options = parseRunOptions(args);
-        URI target = options.target();
-        Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-        if (options.allowLocalDemoMcp()) {
-            System.err.println("WARNING: Local demo fallback enabled. MCP request payload fields are unavailable, "
-                    + "so this run approves only the mcp permission kind, not an exact target. "
-                    + "Use only with the controlled workshop target.");
+        if (args.length != 1) {
+            throw new IllegalArgumentException("Usage: mvn compile exec:java -Dexec.args=\"<http-or-https-url>\"");
         }
+        URI target = parseTarget(args[0]);
+        Path workingDirectory = Path.of("").toAbsolutePath().normalize();
         var lookup = ToolDefinition.from(
                 "accessibility_rule_lookup",
                 "Looks up read-only WCAG guidance maintained by this application.",
@@ -61,32 +55,13 @@ public final class AccessibilityReport {
                         .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                         .setWorkingDirectory(workingDirectory.toString())
                         .setTools(List.of("browser_navigate"))))
-                .setOnPermissionRequest((request, ignored) -> {
-                    if ("mcp".equals(request.getKind())
-                            && isExactNavigation(request.getExtensionData(), target)) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    // SDK issue #2273 currently prevents inspecting MCP request fields for the exact check.
-                    if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.reject(
-                                    "This workshop allows Playwright to navigate only to the exact requested target. "
-                                            + "MCP requests without target data remain denied unless the explicit "
-                                            + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-                });
+                .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(config).get();
-            var response = session.sendAndWait(new MessageOptions().setPrompt(reportPrompt(target))).get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            try (var session = client.createSession(config).get()) {
+                ResponseStreamer.sendAndPrint(session, reportPrompt(target));
             }
-            System.out.println(response.getData().content());
         }
     }
 
@@ -99,65 +74,6 @@ public final class AccessibilityReport {
             throw new IllegalArgumentException("Enter an absolute HTTP or HTTPS URL.");
         }
         return target;
-    }
-
-    private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-        boolean allowLocalDemoMcp = false;
-        String target = null;
-        for (String arg : args) {
-            if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-                if (allowLocalDemoMcp) {
-                    throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-                }
-                allowLocalDemoMcp = true;
-            } else if (target == null) {
-                target = arg;
-            } else {
-                throw new IllegalArgumentException(usage());
-            }
-        }
-        if (target == null) {
-            throw new IllegalArgumentException(usage());
-        }
-        return new RunOptions(parseTarget(target), allowLocalDemoMcp);
-    }
-
-    private static String usage() {
-        return "Usage: mvn compile exec:java -Dexec.args=\"["
-                + LOCAL_DEMO_MCP_FLAG + "] <http-or-https-url>\"";
-    }
-
-    private static boolean isExactNavigation(Map<String, Object> request, URI target) {
-        if (request == null
-                || !"playwright".equals(request.get("serverName"))
-                || !(request.get("toolName") instanceof String toolName)
-                || !("browser_navigate".equals(toolName) || "playwright-browser_navigate".equals(toolName))
-                || !(request.get("args") instanceof Map<?, ?> args)
-                || !(args.get("url") instanceof String requested)) {
-            return false;
-        }
-        try {
-            return sameUrl(new URI(requested), target);
-        } catch (URISyntaxException ignored) {
-            return false;
-        }
-    }
-
-    private static boolean sameUrl(URI requested, URI allowed) {
-        return equalsIgnoreCase(requested.getScheme(), allowed.getScheme())
-                && equalsIgnoreCase(requested.getHost(), allowed.getHost())
-                && requested.getPort() == allowed.getPort()
-                && java.util.Objects.equals(requested.getRawUserInfo(), allowed.getRawUserInfo())
-                && java.util.Objects.equals(requested.getRawPath(), allowed.getRawPath())
-                && java.util.Objects.equals(requested.getRawQuery(), allowed.getRawQuery())
-                && java.util.Objects.equals(requested.getRawFragment(), allowed.getRawFragment());
-    }
-
-    private static boolean equalsIgnoreCase(String left, String right) {
-        return left == null ? right == null : right != null && left.equalsIgnoreCase(right);
-    }
-
-    private record RunOptions(URI target, boolean allowLocalDemoMcp) {
     }
 
     private static String lookupRule(String query) {

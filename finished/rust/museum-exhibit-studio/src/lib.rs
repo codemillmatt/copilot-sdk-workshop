@@ -1,13 +1,11 @@
 use std::error::Error;
 use std::fmt;
 use std::future::{Future, poll_fn};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, Waker};
-use std::thread;
+use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -175,48 +173,6 @@ impl fmt::Display for StudioError {
 
 impl Error for StudioError {}
 
-struct Deadline {
-    expired: Arc<AtomicBool>,
-    waker: Arc<Mutex<Option<Waker>>>,
-}
-
-impl Deadline {
-    fn new(duration: Duration) -> Self {
-        let expired = Arc::new(AtomicBool::new(false));
-        let waker = Arc::new(Mutex::new(None::<Waker>));
-        let thread_expired = Arc::clone(&expired);
-        let thread_waker = Arc::clone(&waker);
-        thread::spawn(move || {
-            thread::sleep(duration);
-            thread_expired.store(true, Ordering::SeqCst);
-            if let Ok(mut waker) = thread_waker.lock() {
-                if let Some(waker) = waker.take() {
-                    waker.wake();
-                }
-            }
-        });
-        Self { expired, waker }
-    }
-}
-
-impl Future for Deadline {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.expired.load(Ordering::SeqCst) {
-            return Poll::Ready(());
-        }
-        if let Ok(mut waker) = self.waker.lock() {
-            *waker = Some(cx.waker().clone());
-        }
-        if self.expired.load(Ordering::SeqCst) {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-}
-
 enum StreamOutcome {
     Sent(Result<(), RuntimeError>),
     Event(Result<SessionEvent, RuntimeError>),
@@ -231,7 +187,7 @@ pub async fn stream_exhibit(
     let mut events = session.subscribe();
     let mut send = Box::pin(session.send(MessageOptions::new(prompt.into())));
     let mut receive = Box::pin(events.recv());
-    let mut deadline = Box::pin(Deadline::new(timeout));
+    let mut deadline = Box::pin(tokio::time::sleep(timeout));
     let mut sent = false;
     let mut idle = false;
     let mut received_delta = false;
@@ -239,6 +195,9 @@ pub async fn stream_exhibit(
 
     while !sent || !idle {
         let outcome = poll_fn(|cx| {
+            if let Poll::Ready(()) = Future::poll(deadline.as_mut(), cx) {
+                return Poll::Ready(StreamOutcome::Timeout);
+            }
             if !sent {
                 if let Poll::Ready(result) = Future::poll(send.as_mut(), cx) {
                     return Poll::Ready(StreamOutcome::Sent(
@@ -252,9 +211,6 @@ pub async fn stream_exhibit(
                 return Poll::Ready(StreamOutcome::Event(
                     result.map_err(|error| Box::new(error) as RuntimeError),
                 ));
-            }
-            if let Poll::Ready(()) = Future::poll(deadline.as_mut(), cx) {
-                return Poll::Ready(StreamOutcome::Timeout);
             }
             Poll::Pending
         })
@@ -588,6 +544,22 @@ pub fn wikipedia_server() -> McpServerConfig {
 
 pub struct WikipediaPermissions;
 
+pub struct DenyUnexpectedPermissions;
+
+#[async_trait]
+impl PermissionHandler for DenyUnexpectedPermissions {
+    async fn handle(
+        &self,
+        _session_id: SessionId,
+        _request_id: RequestId,
+        _request: PermissionRequestData,
+    ) -> PermissionResult {
+        PermissionResult::reject(Some(
+            "This session does not allow unexpected permission requests.".to_owned(),
+        ))
+    }
+}
+
 pub fn wikipedia_permission_handler() -> WikipediaPermissions {
     WikipediaPermissions
 }
@@ -634,8 +606,12 @@ impl PermissionHandler for WikipediaPermissions {
         request: PermissionRequestData,
     ) -> PermissionResult {
         let payload = permission_payload(&request);
-        let kind_allowed = request.kind == Some(PermissionRequestKind::Mcp)
-            || payload.kind.as_deref() == Some("mcp");
+        let kind_allowed = if request.extra.get("permissionRequest").is_some() {
+            payload.kind.as_deref() == Some("mcp")
+                && (request.kind.is_none() || request.kind == Some(PermissionRequestKind::Mcp))
+        } else {
+            request.kind == Some(PermissionRequestKind::Mcp)
+        };
         let tool_allowed = matches!(
             payload.tool_name.as_deref(),
             Some("search" | "readArticle" | "wikipedia-search" | "wikipedia-readArticle")
@@ -663,6 +639,7 @@ pub struct ExtractedSources {
     pub sources: Vec<Source>,
 }
 
+/// Parses model-written links; it does not verify their URLs or actual use.
 pub fn extract_sources(content: &str) -> ExtractedSources {
     let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
     let lines = normalized.lines().collect::<Vec<_>>();
@@ -703,6 +680,81 @@ pub struct ExhibitWritePermissions {
     exhibit_path: PathBuf,
 }
 
+#[derive(Debug)]
+pub struct ArtifactState {
+    path: PathBuf,
+    fingerprint: Option<(u64, usize)>,
+}
+
+pub fn capture_artifact_state(
+    working_directory: impl AsRef<Path>,
+    file_name: &str,
+) -> io::Result<ArtifactState> {
+    if file_name.is_empty()
+        || Path::new(file_name).components().count() != 1
+        || !matches!(
+            Path::new(file_name).components().next(),
+            Some(Component::Normal(_))
+        )
+    {
+        return Err(io::Error::other(
+            "Artifact name must be a single file name.",
+        ));
+    }
+    let directory = working_directory.as_ref().canonicalize()?;
+    if !directory.is_dir() {
+        return Err(io::Error::other(
+            "Artifact working directory is not a directory.",
+        ));
+    }
+    let path = directory.join(file_name);
+    let fingerprint = match std::fs::symlink_metadata(&path) {
+        Ok(_) => Some(artifact_fingerprint(&path)?),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    Ok(ArtifactState { path, fingerprint })
+}
+
+pub fn verify_artifact_update(state: &ArtifactState) -> io::Result<()> {
+    let fingerprint = artifact_fingerprint(&state.path).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("No output update was verified. {error}"),
+        )
+    })?;
+    if fingerprint.1 == 0 {
+        return Err(io::Error::other(
+            "No output update was verified. The output is empty.",
+        ));
+    }
+    if state.fingerprint == Some(fingerprint) {
+        return Err(io::Error::other("No output update was verified."));
+    }
+    Ok(())
+}
+
+fn artifact_fingerprint(path: &Path) -> io::Result<(u64, usize)> {
+    let before = std::fs::symlink_metadata(path)?;
+    if !before.is_file() || before.file_type().is_symlink() {
+        return Err(io::Error::other(
+            "Artifact must be a regular, nonsymlink file.",
+        ));
+    }
+    let content = std::fs::read(path)?;
+    let after = std::fs::symlink_metadata(path)?;
+    if !after.is_file()
+        || after.file_type().is_symlink()
+        || before.len() != after.len()
+        || before.modified()? != after.modified()?
+    {
+        return Err(io::Error::other("Artifact changed while being read."));
+    }
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    Ok((hasher.finish(), content.len()))
+}
+
 pub fn exhibit_write_permission(working_directory: impl Into<PathBuf>) -> ExhibitWritePermissions {
     let directory = absolute_normalized_path(working_directory.into());
     let exhibit_path = normalize_path(directory.join(EXHIBIT_FILE_NAME));
@@ -721,8 +773,12 @@ impl PermissionHandler for ExhibitWritePermissions {
         request: PermissionRequestData,
     ) -> PermissionResult {
         let payload = permission_payload(&request);
-        let kind_allowed = request.kind == Some(PermissionRequestKind::Write)
-            || payload.kind.as_deref() == Some("write");
+        let kind_allowed = if request.extra.get("permissionRequest").is_some() {
+            payload.kind.as_deref() == Some("write")
+                && (request.kind.is_none() || request.kind == Some(PermissionRequestKind::Write))
+        } else {
+            request.kind == Some(PermissionRequestKind::Write)
+        };
         let file_allowed = payload.file_name.as_deref().is_some_and(|file_name| {
             let candidate = Path::new(file_name);
             let candidate = if candidate.is_absolute() {

@@ -106,15 +106,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.streaming = Some(true);
     config.tools = Some(vec![lookup]);
     config.available_tools = Some(vec!["accessibility_rule_lookup".to_owned()]);
+    let config = config.with_permission_handler(github_copilot_sdk::permission::deny_all());
 
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(config).await?;
-    println!("\nCopilot:");
-    stream_response!(
-        session,
-        format!("Use accessibility_rule_lookup to answer this question: {question}")
-    );
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let result = async {
+        let session = client.create_session(config).await?;
+        println!("\nCopilot:");
+        let streamed = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(
+                session,
+                format!("Use accessibility_rule_lookup to answer this question: {question}")
+            );
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await;
+        let stream_result = streamed
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "timeout waiting for response"))
+            .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+            .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if stream_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        stream_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }

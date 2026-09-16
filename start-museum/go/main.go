@@ -9,10 +9,10 @@ import "fmt"
 // Everything below is yours to write, one lesson at a time.
 //
 // Step 1  First curator session .......... create the client with copilot.NewClient, create a
-//                                          session with OnPermissionRequest:
-//                                          copilot.PermissionHandler.ApproveAll so requests get an
-//                                          answer, send a prompt, print the reply, then
-//                                          disconnect and stop.
+//                                          zero-tools session with AvailableTools: []string{}
+//                                          and OnPermissionRequest: DenyUnexpectedPermission,
+//                                          send a prompt, print the reply, then disconnect and stop
+//                                          even on failure. Unset tools are not a zero-tools policy.
 // Step 2  Stream the curator ............. swap the blocking send for StreamExhibit so tokens and
 //                                          [tool:start] / [tool:done] events print live.
 // Step 3  Curator voice .................. add `const systemMessage = ...` here and pass it as
@@ -30,10 +30,11 @@ import "fmt"
 // Step 6  Prove the structure ............ call FormatValidation(ValidateExhibit(exhibit)).
 // Step 7  Wikipedia research ............. add researchConfig() with WikipediaServer() plus
 //                                          WikipediaPermissionHandler(), run it through
-//                                          runSession, and print sources after the exhibit.
+//                                          runSession, and print model-reported, unverified sources.
 //                                          Research never joins the approved facts.
 // Step 8  Interactive exhibit page ....... add htmlConfig() with the "builtin:apply_patch"
-//                                          allowlist and ExhibitWritePermission(...).
+//                                          allowlist and ExhibitWritePermission(...); capture the
+//                                          artifact before the run and verify its update afterward.
 
 // Your system message (Step 3) goes here.
 

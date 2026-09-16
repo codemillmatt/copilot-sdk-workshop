@@ -159,6 +159,73 @@ a {
     align-items: center;
 }
 
+.workshop-introduction {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(360px, 0.96fr);
+    gap: clamp(1.5rem, 4vw, 3.5rem);
+    align-items: start;
+}
+
+.workshop-introduction .hero-copy {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+}
+
+.workshop-introduction h1 {
+    max-width: 720px;
+    font-size: clamp(2.55rem, 4.8vw, 4.25rem);
+    line-height: 1.03;
+}
+
+.hero-art {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    margin: 0;
+    align-self: start;
+}
+
+.hero-art img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 1.4rem;
+    box-shadow: var(--shadow);
+}
+
+.workshop-explanation,
+.workshop-start {
+    margin-top: 1.6rem;
+}
+
+.section-divider {
+    width: 100%;
+    height: 1px;
+    margin: 2.5rem 0 0;
+    padding: 0;
+    border: 0;
+    background: var(--border);
+}
+
+.workshop-explanation p {
+    max-width: 780px;
+    color: var(--muted);
+}
+
+.start-description {
+    max-width: 780px;
+    color: var(--muted);
+}
+
+.project-context {
+    margin: 1rem 0;
+}
+
+.workshop-start .hero-action {
+    margin-top: 1.5rem;
+}
+
 .eyebrow {
     margin: 0 0 0.85rem;
     color: var(--neon-cyan);
@@ -462,16 +529,22 @@ h1 {
 .outcomes {
     display: grid;
     grid-template-columns: 0.9fr 1.1fr;
-    gap: clamp(2rem, 6vw, 6rem);
-    align-items: start;
+    gap: clamp(1.5rem, 4vw, 4rem);
+    align-items: center;
     margin-top: clamp(2rem, 5vh, 3.5rem);
-    padding: 1.6rem 0 0;
-    border-top: 1px solid var(--border);
+    padding: clamp(1.4rem, 3vw, 2.4rem);
+    border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+    border-radius: 1.2rem;
+    background: linear-gradient(120deg,
+        color-mix(in srgb, var(--accent) 12%, var(--bg-elevated)),
+        color-mix(in srgb, var(--violet) 9%, var(--bg-elevated)));
+    box-shadow: 0 12px 38px color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .outcomes h2 {
     margin-bottom: 0;
-    font-size: clamp(1.45rem, 2.3vw, 2.1rem);
+    color: var(--text);
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
     line-height: 1.15;
     letter-spacing: -0.03em;
 }
@@ -482,7 +555,7 @@ h1 {
     gap: 0.65rem 1.5rem;
     margin: 0;
     padding: 0;
-    color: var(--muted);
+    color: var(--text);
     list-style: none;
 }
 
@@ -505,8 +578,24 @@ h1 {
         padding-top: 2.5rem;
     }
 
-    .hero-layout {
+    .hero-layout,
+    .workshop-introduction {
         grid-template-columns: 1fr;
+    }
+
+    .workshop-introduction .hero-copy,
+    .hero-art {
+        grid-column: 1;
+    }
+
+    .workshop-introduction .hero-copy {
+        grid-row: 1;
+    }
+
+    .hero-art {
+        grid-row: 2;
+        width: min(100%, 530px);
+        justify-self: center;
     }
 
     .terminal-preview {

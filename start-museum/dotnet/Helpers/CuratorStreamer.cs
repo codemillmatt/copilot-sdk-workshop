@@ -21,9 +21,19 @@ public static class CuratorStreamer
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var receivedDelta = false;
         var actualTimeout = timeout ?? GenerationTimeout;
+        if (actualTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), "The response timeout must be positive.");
+        }
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(actualTimeout);
 
         using var subscription = session.On<SessionEvent>(sessionEvent =>
         {
+            if (completed.Task.IsCompleted)
+            {
+                return;
+            }
             switch (sessionEvent)
             {
                 case AssistantMessageDeltaEvent delta when !string.IsNullOrEmpty(delta.Data.DeltaContent):
@@ -31,9 +41,13 @@ public static class CuratorStreamer
                     response.Append(delta.Data.DeltaContent);
                     Console.Write(delta.Data.DeltaContent);
                     break;
-                case AssistantMessageEvent message when !receivedDelta && !string.IsNullOrEmpty(message.Data.Content):
-                    response.Append(message.Data.Content);
-                    Console.Write(message.Data.Content);
+                case AssistantMessageEvent message:
+                    if (!receivedDelta && !string.IsNullOrEmpty(message.Data.Content))
+                    {
+                        response.Append(message.Data.Content);
+                        Console.Write(message.Data.Content);
+                    }
+                    receivedDelta = false;
                     break;
                 case ToolExecutionStartEvent tool:
                     Console.WriteLine($"\n[tool:start] {tool.Data.ToolName}");
@@ -51,17 +65,22 @@ public static class CuratorStreamer
             }
         });
 
-        await session.SendAsync(new MessageOptions { Prompt = prompt }, cancellationToken);
-        var delayTask = Task.Delay(actualTimeout, cancellationToken);
-        var finishedTask = await Task.WhenAny(completed.Task, delayTask);
-
-        if (finishedTask == delayTask)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var send = session.SendAsync(new MessageOptions { Prompt = prompt }, deadline.Token);
+            var first = await Task.WhenAny(send, completed.Task).WaitAsync(deadline.Token);
+            await first;
+            await send.WaitAsync(deadline.Token);
+            await completed.Task.WaitAsync(deadline.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
             throw new TimeoutException("The curator response reached the timeout.");
         }
-
-        await completed.Task;
+        finally
+        {
+            await deadline.CancelAsync();
+        }
         return response.ToString();
     }
 }

@@ -1,6 +1,6 @@
 # Museum Exhibit Studio
 
-This completed Node.js/TypeScript sample now has two source files:
+This completed Node.js/TypeScript sample has two source files:
 
 - `src/curator.ts` contains the pre-built helper module: approved facts, bounded
   streaming, deterministic validation, scoped Wikipedia permissions, the optional
@@ -29,9 +29,16 @@ proposed-addition approval loop. Research notes are shown to the educator but ar
 never merged into the approved facts.
 
 After generation, deterministic checks report structure, narrative length, visitor
-questions, and prohibited vocabulary. If selected, the HTML step exposes only
+questions, and prohibited vocabulary. These checks are advisory and do not prove factual grounding.
+The printed source list is model-reported and unverified; parsing a link does not prove it was
+consulted or supports the generated notes. A human must verify it.
+
+If selected, the HTML step exposes only
 `builtin:apply_patch` and approves writing exactly `exhibit.html` in the app
-directory.
+directory. The application confirms an update only when the exact output is a new or
+content-changed, nonempty regular file. Missing, unchanged, or symbolic-link output is not reported
+as a successful write. Review the HTML source before opening it; file verification does not check
+JavaScript behavior or accessibility.
 
 This is the application a learner ends up with after the museum lessons, not a separate reference
 architecture. The entrypoint keeps one small session runner that starts the client, creates the

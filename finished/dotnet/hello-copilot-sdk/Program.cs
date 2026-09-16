@@ -1,5 +1,8 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using HelloCopilotSDK.Helpers;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== Copilot accessibility guidance ===\n");
 
@@ -12,6 +15,8 @@ Console.WriteLine($"Connected to the Copilot runtime: {ping.Message}\n");
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
     Streaming = true,
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("Only the permission-free accessibility lookup is allowed.")),
     Tools = [AccessibilityRuleCatalog.CreateLookupTool()],
     AvailableTools = ["accessibility_rule_lookup"]
 });

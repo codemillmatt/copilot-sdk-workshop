@@ -1,10 +1,51 @@
 import { defineTool, type CopilotSession, type PermissionHandler } from "@github/copilot-sdk";
 import { z } from "zod";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, open, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { constants } from "node:fs";
+import { createHash } from "node:crypto";
 import { accessibilityRules } from "./accessibility-rule-catalog.js";
 
 const maxSnapshotBytes = 1_000_000;
+export const denyUnexpectedPermission: PermissionHandler = () => ({
+  kind: "reject",
+  feedback: "This session does not allow that permission request.",
+});
+
+export type ArtifactState = {
+  readonly path: string;
+  readonly fingerprint: string | null;
+};
+
+async function artifactFingerprint(path: string): Promise<string | null> {
+  let file;
+  try {
+    if (!(await lstat(path)).isFile()) throw new Error("The output must be a regular file, not a symbolic link.");
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    if (!(await file.stat()).isFile()) throw new Error("The output must be a regular file.");
+    const content = await file.readFile();
+    return content.length ? createHash("sha256").update(content).digest("hex") : "";
+  } finally {
+    await file.close();
+  }
+}
+
+export async function captureArtifactState(workingDirectory: string, fileName: string): Promise<ArtifactState> {
+  const path = resolve(workingDirectory, fileName);
+  return { path, fingerprint: await artifactFingerprint(path) };
+}
+
+export async function verifyArtifactUpdate(before: ArtifactState): Promise<void> {
+  const fingerprint = await artifactFingerprint(before.path);
+  if (!fingerprint || fingerprint === before.fingerprint) {
+    throw new Error(`No output update was verified for ${before.path}. Review any existing file.`);
+  }
+}
 const noMatch = { criterion: "No exact match", title: "Criterion not found", whenItApplies: "The issue is not represented in the workshop catalog.", recommendation: "Verify the evidence and consult the complete WCAG reference.", keywords: [] };
 
 export const accessibilityRuleLookup = defineTool("accessibility_rule_lookup", {
@@ -50,7 +91,9 @@ export function permissionForTarget(target: URL): PermissionHandler {
   return (request) => {
     if (request.kind === "mcp" && request.serverName === "playwright" &&
       (request.toolName === "browser_navigate" || request.toolName === "playwright-browser_navigate") &&
-      typeof request.args?.url === "string" && sameUrl(new URL(request.args.url), target)) return { kind: "approve-once" };
+      request.args !== null && typeof request.args === "object" && !Array.isArray(request.args) &&
+      typeof request.args.url === "string" && URL.canParse(request.args.url) &&
+      sameUrl(new URL(request.args.url), target)) return { kind: "approve-once" };
     return { kind: "reject", feedback: "This workshop allows Playwright to navigate only to the exact requested target." };
   };
 }
@@ -63,18 +106,32 @@ function sameUrl(requested: URL, allowed: URL): boolean {
     requested.search === allowed.search && requested.hash === allowed.hash;
 }
 
-export async function streamResponse(session: CopilotSession, prompt: string): Promise<void> {
+export async function streamResponse(session: CopilotSession, prompt: string, timeout = 120_000): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let receivedDelta = false;
-    const unsubscribe = session.on((event) => {
+    let settled = false;
+    let unsubscribe = () => {};
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe();
+      if (error) reject(error);
+      else resolve();
+    };
+    const timer = setTimeout(() => finish(new Error("Response timeout.")), timeout);
+    unsubscribe = session.on((event) => {
       if (event.type === "assistant.message_delta" && event.data.deltaContent) { receivedDelta = true; process.stdout.write(event.data.deltaContent); }
-      else if (event.type === "assistant.message" && !receivedDelta) process.stdout.write(event.data.content);
+      else if (event.type === "assistant.message") {
+        if (!receivedDelta) process.stdout.write(event.data.content);
+        receivedDelta = false;
+      }
       else if (event.type === "tool.execution_start") console.log(`\n[tool:start] ${event.data.toolName}`);
       else if (event.type === "tool.execution_complete") console.log(`[tool:done] success=${event.data.success}`);
-      else if (event.type === "session.error") reject(new Error(event.data.message));
-      else if (event.type === "session.idle") { console.log(); unsubscribe(); resolve(); }
+      else if (event.type === "session.error") finish(new Error(event.data.message));
+      else if (event.type === "session.idle") { console.log(); finish(); }
     });
-    void session.send({ prompt }).catch(reject);
+    void session.send({ prompt }).catch(finish);
   });
 }
 

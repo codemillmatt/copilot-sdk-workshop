@@ -1,6 +1,6 @@
 # Step 7: Run and explain the application
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll be ready to explain
 
@@ -13,6 +13,7 @@ and report limitations.
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-dotnet-1 -->
 ```text
 Console application
   |
@@ -22,6 +23,9 @@ Console application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -34,6 +38,7 @@ Console application
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-nodejs-1 -->
 ```text
 Node.js application
   |
@@ -43,6 +48,9 @@ Node.js application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -58,6 +66,7 @@ The completed report is also in
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-python-1 -->
 ```text
 Python application
   |
@@ -67,6 +76,9 @@ Python application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -82,6 +94,7 @@ The completed report is also in
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-go-1 -->
 ```text
 Go application
   |
@@ -91,6 +104,9 @@ Go application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -103,6 +119,7 @@ Go application
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-rust-1 -->
 ```text
 Rust application
   |
@@ -112,6 +129,9 @@ Rust application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -124,6 +144,7 @@ Rust application
 The finished application is an agent host. Its session coordinates a model, an application-owned
 function, and a browser running in another process:
 
+<!-- code-id: 07-run-explain-java-1 -->
 ```text
 Java application
   |
@@ -133,6 +154,9 @@ Java application
             |
             +-- accessibility_rule_lookup
             |     same process, application-owned data
+            |
+            +-- read_latest_accessibility_snapshot
+            |     same process, bounded current-run evidence
             |
             `-- Playwright MCP
                   separate process, scoped permission handler
@@ -211,18 +235,16 @@ cargo run -- "{{TARGET_APP_URL}}"
 :::
 :::language java
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 
-> **Java local-demo warning:** This explicit flag is a temporary workaround for
-> [github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273). Without it,
-> the callback fails closed unless it can verify the exact URL from the permission payload. With it,
-> the session approves only the `mcp` permission kind, one request at a time, under the configured
-> Playwright `browser_navigate` allowlist; it cannot enforce the exact target. Use it only for the
-> controlled local workshop target, never for production, shared, or untrusted URLs.
+> **Strict Java policy:** The pinned SDK exposes permission payload fields. Keep exact-target
+> navigation and exact-file write checks; missing or malformed fields are rejected. Do not
+> broaden permissions to work around a rejected request.
 :::
 Use the workshop target:
 
+<!-- code-id: 07-run-explain-shared-1 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -238,6 +260,7 @@ Watch for all five stages:
 :::language dotnet
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-dotnet-2 -->
 ```text
 === Accessibility Report Generator ===
 
@@ -267,6 +290,7 @@ Analyzing: {{TARGET_APP_URL}}
 :::language nodejs
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-nodejs-2 -->
 ```text
 [tool:start] browser_navigate
 [tool:done] success=true
@@ -291,6 +315,7 @@ Your transcript will vary, but it should have this shape:
 :::language python
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-python-2 -->
 ```text
 [tool:start] browser_navigate
 [tool:done] success=True
@@ -315,6 +340,7 @@ Your transcript will vary, but it should have this shape:
 :::language go
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-go-2 -->
 ```text
 # Accessibility review
 ## Finding 1: ...
@@ -332,6 +358,7 @@ permission handler gates external navigation. The expected report is evidence-bo
 :::language rust
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-rust-2 -->
 ```text
 # Accessibility review
 ## Finding 1: ...
@@ -349,6 +376,7 @@ and the permission handler trusts only exact navigation.
 :::language java
 Your transcript will vary, but it should have this shape:
 
+<!-- code-id: 07-run-explain-java-2 -->
 ```text
 # Accessibility review
 ## Finding 1: ...
@@ -360,8 +388,8 @@ Your transcript will vary, but it should have this shape:
 ```
 
 Explain that Maven compiles the Java 17 application, `CopilotClient` manages the runtime, and tools
-remain scoped. By default the permission callback accepts only the canonical URL; with the explicit
-local-demo flag it is limited to the configured `mcp` kind but cannot verify that URL.
+remain scoped. The permission helper validates the canonical URL and rejects missing or
+nonmatching request fields. The snapshot reader is a separate local tool with no path argument.
 :::
 
 The controlled target intentionally includes browser-observable issues: a missing text alternative,
@@ -409,6 +437,30 @@ do not accept a finding that is absent from both the snapshot and source.
 </details>
 
 ## Keep exploring
+
+### Make one change without a complete-file recipe
+
+Save your working entrypoint. Add a small local tool named `review_policy` that returns a fixed
+application-owned sentence: `Report only findings supported by the snapshot and name the review limits.`
+Use the local-tool API from Step 3, register the implementation, and add its name to the existing
+allowlist without removing any of the three core tools. Ask the agent to consult it during review.
+
+Before running, explain why this belongs in a local callback rather than a new MCP process.
+Inspect the tool's direct result and the configured allowlist first. A model run may choose not
+to call it; a convincing report alone is not evidence of a call.
+
+<details>
+<summary>Compare your design</summary>
+
+The tool needs a name, a description explaining when to use it, an empty argument schema, and a
+handler returning the fixed policy. The application owns both the data and execution, so no
+external process is needed. Registration supplies the implementation; the allowlist exposes it;
+the prompt only requests its use. Look for its tool event before claiming the model consulted it.
+
+</details>
+
+Keep a copy of this practice work, then restore the saved baseline entrypoint before either
+optional extension. The finished reporter is the three-tool baseline, not this practice variant.
 
 Try [Optional: Select a model](08-model-selection.md) if your application needs explicit control
 over model choice, then continue to [Optional: Generate an interactive HTML report](09-interactive-html-report.md).

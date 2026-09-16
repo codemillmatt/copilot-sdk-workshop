@@ -30,8 +30,6 @@ jobs:
   smoke-build:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/.cargo-target
     strategy:
       fail-fast: false
       matrix:
@@ -57,14 +55,8 @@ jobs:
           dotnet-version: 10.0.x
 
       - uses: actions/setup-node@v7
-        if: matrix.language == 'nodejs'
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            start-accessibility/nodejs/package-lock.json
-            start-museum/nodejs/package-lock.json
-            finished/nodejs/*/package-lock.json
 
       - uses: actions/setup-python@v7
         if: matrix.language == 'python'
@@ -90,16 +82,6 @@ jobs:
         with:
           toolchain: "1.94.0"
 
-      - uses: Swatinem/rust-cache@v2
-        if: matrix.language == 'rust'
-        with:
-          workspaces: |
-            start-accessibility/rust -> ../../.cargo-target
-            start-museum/rust -> ../../.cargo-target
-            finished/rust/accessibility-report -> ../../../.cargo-target
-            finished/rust/hello-copilot-sdk -> ../../../.cargo-target
-            finished/rust/museum-exhibit-studio -> ../../../.cargo-target
-
       - uses: actions/setup-java@v6
         if: matrix.language == 'java'
         with:
@@ -119,6 +101,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
 
       - uses: actions/setup-dotnet@v6
         with:

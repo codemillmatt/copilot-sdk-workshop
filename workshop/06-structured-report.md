@@ -1,6 +1,6 @@
 # Step 6: Produce a structured report
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll produce
 
@@ -16,13 +16,18 @@ remediation based on that evidence and the catalog result.
 A clear output contract tells the agent what to include, what to leave out, and how to handle
 uncertainty. It makes reports more consistent without claiming that the review is exhaustive.
 
+Here the contract is a requested Markdown structure, not a validated JSON schema. The application
+still streams model text, and a human checks whether its fields and evidence are present. Museum
+Exhibit Studio shows a different approach: deterministic code checks selected output requirements.
+
 ## Be useful without overstating the result
 
 One automated snapshot cannot establish accessibility conformance. The report should stick to
 high-confidence findings without invented statistics, decorative severity labels, or a broad claim
 that the page passes or fails WCAG.
 
-The agent now turns `browser evidence + catalog result` into a bounded, repeatable report.
+The requested flow is `browser evidence + catalog result -> report for human review`.
+Its wording and findings can vary; a prompt alone does not make the result repeatable.
 
 ## Give the report a contract
 
@@ -31,6 +36,7 @@ The agent now turns `browser evidence + catalog result` into a bounded, repeatab
 
 Create `Helpers/Prompts.cs`:
 
+<!-- code-id: 06-structured-report-dotnet-1 -->
 ```csharp
 namespace HelloCopilotSDK.Helpers;
 
@@ -67,6 +73,7 @@ public static class Prompts
 
 Replace the final send call in `Program.cs`:
 
+<!-- code-id: 06-structured-report-dotnet-2 -->
 ```csharp
 Console.WriteLine($"\nAnalyzing: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(session, Prompts.CreateReportPrompt(targetUri));
@@ -78,6 +85,7 @@ await ResponseStreamer.SendAndPrintAsync(session, Prompts.CreateReportPrompt(tar
 
 In `src/workshop.ts`, add or replace `reportPrompt`:
 
+<!-- code-id: 06-structured-report-nodejs-1 -->
 ```typescript
 export function reportPrompt(target: URL): string {
   return `Prepare an evidence-based accessibility review of ${target.href}.
@@ -104,6 +112,7 @@ Do not invent evidence, report unsupported statistics, or claim the page is WCAG
 
 Create or replace `src/report.ts` with the URL parsing, session config, and prompt:
 
+<!-- code-id: 06-structured-report-nodejs-2 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, createSnapshotReader, permissionForTarget, reportPrompt, streamResponse } from "./workshop.js";
@@ -113,9 +122,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true, onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
     availableTools: ["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"],
@@ -130,6 +140,7 @@ try {
 
 Replace `src/index.ts` so the package start command launches the report entrypoint:
 
+<!-- code-id: 06-structured-report-nodejs-3 -->
 ```typescript
 import "./report.js";
 ```
@@ -140,6 +151,7 @@ import "./report.js";
 
 In `workshop.py`, add or replace `report_prompt`:
 
+<!-- code-id: 06-structured-report-python-1 -->
 ```python
 def report_prompt(target: str) -> str:
     return f"""Prepare an evidence-based accessibility review of {target}.
@@ -165,8 +177,10 @@ Do not invent evidence, report unsupported statistics, or claim the page is WCAG
 
 Create or replace `report.py` with URL parsing, session config, streaming, and the report prompt:
 
+<!-- code-id: 06-structured-report-python-2 -->
 ```python
 import asyncio
+from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
@@ -182,7 +196,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
+        async with await client.create_session(working_directory=str(Path.cwd()), streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
             done = asyncio.Event()
             error: RuntimeError | None = None
             received_delta = False
@@ -192,17 +206,23 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name): print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success): print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData(): done.set()
-            session.on(on_event)
-            await session.send(report_prompt(target))
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(report_prompt(target))
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -216,6 +236,7 @@ if __name__ == "__main__":
 
 Replace `main.py` so the documented command launches the report entrypoint:
 
+<!-- code-id: 06-structured-report-python-3 -->
 ```python
 from report import main
 
@@ -231,6 +252,7 @@ if __name__ == "__main__":
 
 In `main.go`, add `reportPrompt`:
 
+<!-- code-id: 06-structured-report-go-1 -->
 ```go
 func reportPrompt(target string) string {
 	return fmt.Sprintf(`Prepare an evidence-based accessibility review of %s.
@@ -252,14 +274,21 @@ State that this focused review is not a full WCAG conformance audit.`, target)
 :::language go
 ### 2. Parse the target and use the contract
 
-Replace `main` so it validates the URL argument, builds the three-tool session, and sends the report
+Replace the `main` wrapper and `run` function so it validates the URL argument, builds the three-tool session, and sends the report
 prompt:
 
+<!-- code-id: 06-structured-report-go-2 -->
 ```go
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "Usage: go run . <http-or-https-url>")
-		return
+		return fmt.Errorf("Usage: go run . <http-or-https-url>")
 	}
 	target := os.Args[1]
 	if !strings.Contains(target, "://") {
@@ -267,13 +296,12 @@ func main() {
 	}
 	parsed, err := url.ParseRequestURI(target)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		fmt.Fprintln(os.Stderr, "Enter an absolute HTTP or HTTPS URL.")
-		return
+		return fmt.Errorf("Enter an absolute HTTP or HTTPS URL.")
 	}
 
 	workingDirectory, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 	lookup.SkipPermission = true
@@ -281,10 +309,10 @@ func main() {
 	readSnapshot.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 		Streaming:           copilot.Bool(true),
 		Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -300,12 +328,13 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 	if err := streamResponse(session, reportPrompt(target)); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 :::
@@ -315,6 +344,7 @@ func main() {
 
 In `src/main.rs`, add `report_prompt`:
 
+<!-- code-id: 06-structured-report-rust-1 -->
 ```rust
 fn report_prompt(target: &Url) -> String {
     format!(
@@ -344,6 +374,7 @@ Do not invent evidence, report unsupported statistics, or claim the page is WCAG
 Replace `main` so it validates the URL argument, builds the three-tool session, and sends the report
 prompt:
 
+<!-- code-id: 06-structured-report-rust-2 -->
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -407,11 +438,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(config).await?;
-    stream_response!(session, report_prompt(&target));
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(session, report_prompt(&target));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+        })
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 :::
@@ -421,6 +477,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 In `src/main/java/workshop/AccessibilityReport.java`, add `reportPrompt`:
 
+<!-- code-id: 06-structured-report-java-1 -->
 ```java
 private static String reportPrompt(URI target) {
     return """
@@ -443,10 +500,8 @@ private static String reportPrompt(URI target) {
 }
 ```
 
-Keep the Step 4 permission callback unchanged. It remains fail-closed unless you explicitly pass
-`--allow-local-demo-mcp` for the controlled workshop target. That temporary `mcp`-kind-only fallback
-does not prove the exact URL because [github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273)
-does not expose the request payload; do not use it outside a disposable local workshop demo.
+Keep the Step 4 strict MCP permission helper and the exact three-tool allowlist unchanged.
+`parseTargetArgument` returns the one validated URI; no permission-bypass option is needed.
 :::
 :::language java
 ### 2. Parse the target and use the contract
@@ -454,18 +509,11 @@ does not expose the request payload; do not use it outside a disposable local wo
 Replace `main` so it validates the URL argument, builds the three-tool session, and sends the report
 prompt:
 
+<!-- code-id: 06-structured-report-java-2 -->
 ```java
-private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
-
 public static void main(String[] args) throws Exception {
-    RunOptions options = parseRunOptions(args);
-    URI target = options.target();
+    URI target = parseTargetArgument(args);
     Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-    if (options.allowLocalDemoMcp()) {
-        System.err.println("WARNING: Local demo fallback enabled. MCP request payload fields are unavailable, "
-                + "so this run approves only the mcp permission kind, not an exact target. "
-                + "Use only with the controlled workshop target.");
-    }
     var lookup = ToolDefinition.from(
             "accessibility_rule_lookup",
             "Looks up read-only WCAG guidance maintained by this application.",
@@ -488,37 +536,21 @@ public static void main(String[] args) throws Exception {
                     .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                     .setWorkingDirectory(workingDirectory.toString())
                     .setTools(List.of("browser_navigate"))))
-            .setOnPermissionRequest((request, ignored) -> {
-                if ("mcp".equals(request.getKind())
-                        && isExactNavigation(request.getExtensionData(), target)) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.reject(
-                                "This workshop allows Playwright to navigate only to the exact requested target. "
-                                        + "MCP requests without target data remain denied unless the explicit "
-                                        + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-            });
+            .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
     try (var client = new CopilotClient()) {
         client.start().get();
-        var session = client.createSession(config).get();
-        var response = session.sendAndWait(new MessageOptions().setPrompt(reportPrompt(target))).get();
-        if (response == null) {
-            throw new IllegalStateException("Copilot completed without an assistant message.");
+        try (var session = client.createSession(config).get()) {
+            ResponseStreamer.sendAndPrint(session, reportPrompt(target));
         }
-        System.out.println(response.getData().content());
     }
 }
 ```
 
-Keep the implementation's `parseTarget` and fallback helpers next to `main`:
+Keep `parseTarget` and `parseTargetArgument` beside `main`. Replace any older parser group
+with these methods; retain the lookup catalog, `SnapshotReader`, and supplied helper files:
 
+<!-- code-id: 06-structured-report-java-3 -->
 ```java
 private static URI parseTarget(String value) throws URISyntaxException {
     String candidate = value.contains("://") ? value : "https://" + value;
@@ -531,33 +563,12 @@ private static URI parseTarget(String value) throws URISyntaxException {
     return target;
 }
 
-private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-    boolean allowLocalDemoMcp = false;
-    String target = null;
-    for (String arg : args) {
-        if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-            if (allowLocalDemoMcp) {
-                throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-            }
-            allowLocalDemoMcp = true;
-        } else if (target == null) {
-            target = arg;
-        } else {
-            throw new IllegalArgumentException(usage());
-        }
+private static URI parseTargetArgument(String[] args) throws URISyntaxException {
+    if (args.length != 1) {
+        throw new IllegalArgumentException(
+                "Usage: mvn compile exec:java -Dexec.args=\"<http-or-https-url>\"");
     }
-    if (target == null) {
-        throw new IllegalArgumentException(usage());
-    }
-    return new RunOptions(parseTarget(target), allowLocalDemoMcp);
-}
-
-private static String usage() {
-    return "Usage: mvn compile exec:java -Dexec.args=\"["
-            + LOCAL_DEMO_MCP_FLAG + "] <http-or-https-url>\"";
-}
-
-private record RunOptions(URI target, boolean allowLocalDemoMcp) {
+    return parseTarget(args[0]);
 }
 ```
 :::
@@ -571,6 +582,7 @@ dotnet run
 
 When the app asks for a URL, paste:
 
+<!-- code-id: 06-structured-report-dotnet-3 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -597,12 +609,13 @@ cargo run -- "{{TARGET_APP_URL}}"
 :::
 :::language java
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 :::
 
 The report should follow this shape:
 
+<!-- code-id: 06-structured-report-shared-1 -->
 ```text
 # Accessibility review
 ## Finding 1: Input has no accessible name
@@ -650,6 +663,7 @@ For comparison, use the
 [`finished/dotnet/accessibility-report`](https://github.com/jamesmontemagno/copilot-sdk-workshop/tree/main/finished/dotnet/accessibility-report)
 project.
 
+<!-- code-id: 06-structured-report-dotnet-4 -->
 ```csharp
 using GitHub.Copilot;
 using HelloCopilotSDK.Helpers;
@@ -685,8 +699,9 @@ Console.WriteLine($"\nConnected to the Copilot runtime: {ping.Message}\n");
 
 var workingDirectory = Directory.GetCurrentDirectory();
 
-await using var session = await client.CreateSessionAsync(new SessionConfig
+var config = new SessionConfig
 {
+    WorkingDirectory = workingDirectory,
     Streaming = true,
     OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),
     Tools =
@@ -710,7 +725,9 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
             Tools = ["browser_navigate"]
         }
     }
-});
+};
+
+await using var session = await client.CreateSessionAsync(config);
 
 Console.WriteLine($"Analyzing: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(session, Prompts.CreateReportPrompt(targetUri));
@@ -728,12 +745,14 @@ project.
 
 `src/index.ts`:
 
+<!-- code-id: 06-structured-report-nodejs-4 -->
 ```typescript
 import "./report.js";
 ```
 
 `src/report.ts`:
 
+<!-- code-id: 06-structured-report-nodejs-5 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, createSnapshotReader, permissionForTarget, reportPrompt, streamResponse } from "./workshop.js";
@@ -743,9 +762,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true, onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
     availableTools: ["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"],
@@ -757,6 +777,7 @@ try {
 
 `reportPrompt` in `src/workshop.ts`:
 
+<!-- code-id: 06-structured-report-nodejs-6 -->
 ```typescript
 export function reportPrompt(target: URL): string {
   return `Prepare an evidence-based accessibility review of ${target.href}.
@@ -790,6 +811,7 @@ project.
 
 `main.py`:
 
+<!-- code-id: 06-structured-report-python-4 -->
 ```python
 from report import main
 
@@ -801,8 +823,10 @@ if __name__ == "__main__":
 
 `report.py`:
 
+<!-- code-id: 06-structured-report-python-5 -->
 ```python
 import asyncio
+from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
@@ -818,7 +842,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
+        async with await client.create_session(working_directory=str(Path.cwd()), streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
             done = asyncio.Event()
             error: RuntimeError | None = None
             received_delta = False
@@ -828,17 +852,23 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name): print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success): print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData(): done.set()
-            session.on(on_event)
-            await session.send(report_prompt(target))
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(report_prompt(target))
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -849,6 +879,7 @@ if __name__ == "__main__":
 
 `report_prompt` in `workshop.py`:
 
+<!-- code-id: 06-structured-report-python-6 -->
 ```python
 def report_prompt(target: str) -> str:
     return f"""Prepare an evidence-based accessibility review of {target}.
@@ -879,6 +910,7 @@ For comparison, use the
 [`finished/go/accessibility-report`](https://github.com/jamesmontemagno/copilot-sdk-workshop/tree/main/finished/go/accessibility-report)
 project. The report contract and entrypoint:
 
+<!-- code-id: 06-structured-report-go-3 -->
 ```go
 func reportPrompt(target string) string {
 	return fmt.Sprintf(`Prepare an evidence-based accessibility review of %s.
@@ -897,9 +929,15 @@ State that this focused review is not a full WCAG conformance audit.`, target)
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "Usage: go run . <http-or-https-url>")
-		return
+		return fmt.Errorf("Usage: go run . <http-or-https-url>")
 	}
 	target := os.Args[1]
 	if !strings.Contains(target, "://") {
@@ -907,13 +945,12 @@ func main() {
 	}
 	parsed, err := url.ParseRequestURI(target)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		fmt.Fprintln(os.Stderr, "Enter an absolute HTTP or HTTPS URL.")
-		return
+		return fmt.Errorf("Enter an absolute HTTP or HTTPS URL.")
 	}
 
 	workingDirectory, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 	lookup.SkipPermission = true
@@ -921,10 +958,10 @@ func main() {
 	readSnapshot.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 		Streaming:           copilot.Bool(true),
 		Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -940,12 +977,13 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 	if err := streamResponse(session, reportPrompt(target)); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 </details>
@@ -959,6 +997,7 @@ For comparison, use the
 [`finished/rust/accessibility-report`](https://github.com/jamesmontemagno/copilot-sdk-workshop/tree/main/finished/rust/accessibility-report)
 project. The report contract and entrypoint:
 
+<!-- code-id: 06-structured-report-rust-3 -->
 ```rust
 fn report_prompt(target: &Url) -> String {
     format!(
@@ -1043,11 +1082,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(config).await?;
-    stream_response!(session, report_prompt(&target));
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(session, report_prompt(&target));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+        })
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 </details>
@@ -1061,18 +1125,11 @@ For comparison, use the
 [`finished/java/accessibility-report`](https://github.com/jamesmontemagno/copilot-sdk-workshop/tree/main/finished/java/accessibility-report)
 project. The report contract, argument parsing, and entrypoint:
 
+<!-- code-id: 06-structured-report-java-4 -->
 ```java
-private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
-
 public static void main(String[] args) throws Exception {
-    RunOptions options = parseRunOptions(args);
-    URI target = options.target();
+    URI target = parseTargetArgument(args);
     Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-    if (options.allowLocalDemoMcp()) {
-        System.err.println("WARNING: Local demo fallback enabled. MCP request payload fields are unavailable, "
-                + "so this run approves only the mcp permission kind, not an exact target. "
-                + "Use only with the controlled workshop target.");
-    }
     var lookup = ToolDefinition.from(
             "accessibility_rule_lookup",
             "Looks up read-only WCAG guidance maintained by this application.",
@@ -1095,31 +1152,13 @@ public static void main(String[] args) throws Exception {
                     .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                     .setWorkingDirectory(workingDirectory.toString())
                     .setTools(List.of("browser_navigate"))))
-            .setOnPermissionRequest((request, ignored) -> {
-                if ("mcp".equals(request.getKind())
-                        && isExactNavigation(request.getExtensionData(), target)) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.reject(
-                                "This workshop allows Playwright to navigate only to the exact requested target. "
-                                        + "MCP requests without target data remain denied unless the explicit "
-                                        + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-            });
+            .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
     try (var client = new CopilotClient()) {
         client.start().get();
-        var session = client.createSession(config).get();
-        var response = session.sendAndWait(new MessageOptions().setPrompt(reportPrompt(target))).get();
-        if (response == null) {
-            throw new IllegalStateException("Copilot completed without an assistant message.");
+        try (var session = client.createSession(config).get()) {
+            ResponseStreamer.sendAndPrint(session, reportPrompt(target));
         }
-        System.out.println(response.getData().content());
     }
 }
 
@@ -1134,34 +1173,15 @@ private static URI parseTarget(String value) throws URISyntaxException {
     return target;
 }
 
-private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-    boolean allowLocalDemoMcp = false;
-    String target = null;
-    for (String arg : args) {
-        if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-            if (allowLocalDemoMcp) {
-                throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-            }
-            allowLocalDemoMcp = true;
-        } else if (target == null) {
-            target = arg;
-        } else {
-            throw new IllegalArgumentException(usage());
-        }
+private static URI parseTargetArgument(String[] args) throws URISyntaxException {
+    if (args.length != 1) {
+        throw new IllegalArgumentException(
+                "Usage: mvn compile exec:java -Dexec.args=\"<http-or-https-url>\"");
     }
-    if (target == null) {
-        throw new IllegalArgumentException(usage());
-    }
-    return new RunOptions(parseTarget(target), allowLocalDemoMcp);
+    return parseTarget(args[0]);
 }
 
-private static String usage() {
-    return "Usage: mvn compile exec:java -Dexec.args=\"["
-            + LOCAL_DEMO_MCP_FLAG + "] <http-or-https-url>\"";
-}
 
-private record RunOptions(URI target, boolean allowLocalDemoMcp) {
-}
 
 private static String reportPrompt(URI target) {
     return """

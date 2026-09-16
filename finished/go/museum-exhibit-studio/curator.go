@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -100,6 +102,92 @@ func ApprovedFactLookup(facts []string) (copilot.Tool, error) {
 	)
 	lookup.SkipPermission = true
 	return lookup, nil
+}
+
+func DenyUnexpectedPermission(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+	feedback := "This session does not allow unexpected permission requests."
+	return &rpc.PermissionDecisionReject{Feedback: &feedback}, nil
+}
+
+type ArtifactState struct {
+	path        string
+	existed     bool
+	fingerprint [sha256.Size]byte
+}
+
+func CaptureArtifactState(workingDirectory, fileName string) (ArtifactState, error) {
+	if fileName == "" || fileName == "." || fileName == ".." || filepath.Base(fileName) != fileName {
+		return ArtifactState{}, fmt.Errorf("Artifact name must be a single file name.")
+	}
+	directory, err := filepath.Abs(workingDirectory)
+	if err != nil {
+		return ArtifactState{}, err
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		return ArtifactState{}, err
+	}
+	if !info.IsDir() {
+		return ArtifactState{}, fmt.Errorf("Artifact working directory is not a directory.")
+	}
+	state := ArtifactState{path: filepath.Join(directory, fileName)}
+	if _, err := os.Lstat(state.path); err != nil {
+		if os.IsNotExist(err) {
+			return state, nil
+		}
+		return ArtifactState{}, err
+	}
+	content, err := readArtifact(state.path)
+	if err != nil {
+		return ArtifactState{}, err
+	}
+	state.existed = true
+	state.fingerprint = sha256.Sum256(content)
+	return state, nil
+}
+
+func VerifyArtifactUpdate(state ArtifactState) error {
+	content, err := readArtifact(state.path)
+	if err != nil {
+		return fmt.Errorf("No output update was verified. %w", err)
+	}
+	if len(content) == 0 {
+		return fmt.Errorf("No output update was verified. The output is empty.")
+	}
+	if state.existed && sha256.Sum256(content) == state.fingerprint {
+		return fmt.Errorf("No output update was verified.")
+	}
+	return nil
+}
+
+func readArtifact(path string) ([]byte, error) {
+	before, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, fmt.Errorf("Artifact %s must be a regular, nonsymlink file.", path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	content, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	after, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !after.Mode().IsRegular() || !os.SameFile(before, after) || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		return nil, fmt.Errorf("Artifact %s changed while being read.", path)
+	}
+	return content, nil
 }
 
 func StreamExhibit(session *copilot.Session, prompt string, timeout time.Duration) (string, error) {
@@ -370,6 +458,7 @@ type SourceExtraction struct {
 	Sources []Source
 }
 
+// ExtractSources parses model-written links; it does not verify their URLs or actual use.
 func ExtractSources(content string) SourceExtraction {
 	normalized := lineEndingNormalizer.Replace(content)
 	lines := strings.Split(normalized, "\n")
@@ -468,6 +557,9 @@ func mcpPermissionDetails(request copilot.PermissionRequest) (string, string, bo
 	case copilot.PermissionRequestMCP:
 		return value.ServerName, value.ToolName, true
 	case *copilot.PermissionRequestMCP:
+		if value == nil {
+			return "", "", false
+		}
 		return value.ServerName, value.ToolName, true
 	}
 
@@ -489,6 +581,9 @@ func writePermissionFileName(request copilot.PermissionRequest) (string, bool) {
 	case copilot.PermissionRequestWrite:
 		return value.FileName, value.FileName != ""
 	case *copilot.PermissionRequestWrite:
+		if value == nil {
+			return "", false
+		}
 		return value.FileName, value.FileName != ""
 	}
 

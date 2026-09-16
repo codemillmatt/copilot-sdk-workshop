@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
+import hashlib
+import os
+import stat
 from urllib.parse import urlsplit
 
 from copilot import define_tool
@@ -10,6 +14,42 @@ from pydantic import BaseModel, Field
 from accessibility_rule_catalog import ACCESSIBILITY_RULES
 
 MAX_SNAPSHOT_BYTES = 1_000_000
+
+
+def deny_unexpected_permission(_request, _invocation):
+    return PermissionDecisionReject(feedback="This session does not allow that permission request.")
+
+
+@dataclass(frozen=True)
+class ArtifactState:
+    path: Path
+    fingerprint: str | None
+
+
+def _artifact_fingerprint(path: Path) -> str | None:
+    try:
+        details = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(details.st_mode):
+        raise ValueError("The output must be a regular file, not a directory or symbolic link.")
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "rb") as output:
+        if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
+            raise ValueError("The output must be a regular file.")
+        content = output.read()
+    return hashlib.sha256(content).hexdigest() if content else ""
+
+
+def capture_artifact_state(working_directory: str, file_name: str) -> ArtifactState:
+    path = Path(os.path.abspath(os.path.join(working_directory, file_name)))
+    return ArtifactState(path, _artifact_fingerprint(path))
+
+
+def verify_artifact_update(before: ArtifactState) -> None:
+    fingerprint = _artifact_fingerprint(before.path)
+    if not fingerprint or fingerprint == before.fingerprint:
+        raise ValueError(f"No output update was verified for {before.path}. Review any existing file.")
 
 
 class LookupParams(BaseModel):
@@ -41,15 +81,19 @@ def create_snapshot_reader(working_directory: str):
 
 def permission_for_target(target: str):
     def handler(request, _invocation):
-        if getattr(request, "kind", None) == "mcp" and request.server_name == "playwright" and request.tool_name in {"browser_navigate", "playwright-browser_navigate"} and isinstance(request.args, dict) and isinstance(request.args.get("url"), str) and _same_url(request.args["url"], target):
+        args = getattr(request, "args", None)
+        if getattr(request, "kind", None) == "mcp" and getattr(request, "server_name", None) == "playwright" and getattr(request, "tool_name", None) in {"browser_navigate", "playwright-browser_navigate"} and isinstance(args, dict) and isinstance(args.get("url"), str) and _same_url(args["url"], target):
             return PermissionDecisionApproveOnce()
         return PermissionDecisionReject(feedback="This workshop allows Playwright to navigate only to the exact requested target.")
     return handler
 
 
 def _same_url(requested: str, allowed: str) -> bool:
-    left, right = urlsplit(requested), urlsplit(allowed)
-    return (left.scheme.lower(), left.hostname.lower() if left.hostname else "", left.port, left.username, left.password, left.path, left.query, left.fragment) == (right.scheme.lower(), right.hostname.lower() if right.hostname else "", right.port, right.username, right.password, right.path, right.query, right.fragment)
+    try:
+        left, right = urlsplit(requested), urlsplit(allowed)
+        return (left.scheme.lower(), left.hostname.lower() if left.hostname else "", left.port, left.username, left.password, left.path, left.query, left.fragment) == (right.scheme.lower(), right.hostname.lower() if right.hostname else "", right.port, right.username, right.password, right.path, right.query, right.fragment)
+    except ValueError:
+        return False
 
 
 def report_prompt(target: str) -> str:

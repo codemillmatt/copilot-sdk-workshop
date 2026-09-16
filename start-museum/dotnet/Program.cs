@@ -5,9 +5,9 @@
 // Everything below is yours to write, one lesson at a time.
 //
 // Step 1  First curator session .......... create the CopilotClient, create a session with
-//                                          OnPermissionRequest = PermissionHandler.ApproveAll so
-//                                          requests get an answer, send a prompt, print the reply,
-//                                          then dispose and stop.
+//                                          AvailableTools = [] and a callback that returns
+//                                          PermissionDecision.Reject for unexpected permissions;
+//                                          send a prompt, print the reply, then dispose and stop.
 // Step 2  Stream the curator ............. swap the blocking send for
 //                                          CuratorStreamer.StreamExhibitAsync so tokens and
 //                                          [tool:start] / [tool:done] events print live.
@@ -22,17 +22,19 @@
 // Step 5  Set the guardrails ............. add GenerationConfig() and the single RunSessionAsync()
 //                                          lifecycle function: one-tool allowlist, the Step 1
 //                                          permission handler carried forward, generation timeout,
-//                                          blank-output rejection, cleanup in `finally`.
+//                                          blank-output rejection, cleanup with `await using`.
 //                                          Steps 6-8 reuse RunSessionAsync and add nothing to it.
 // Step 6  Prove the structure ............ call
 //                                          CuratorValidation.FormatValidation(
 //                                              CuratorValidation.ValidateExhibit(exhibit)).
 // Step 7  Wikipedia research ............. add ResearchConfig() with CuratorSafety.WikipediaServer()
 //                                          plus CuratorSafety.WikipediaPermissionHandler(), run it
-//                                          through RunSessionAsync, and print sources after the
-//                                          exhibit. Research never joins the approved facts.
+//                                          through RunSessionAsync, and print model-reported,
+//                                          unverified sources. Research never joins approved facts.
 // Step 8  Interactive exhibit page ....... add HtmlConfig() with the "builtin:apply_patch"
 //                                          allowlist and CuratorSafety.ExhibitWritePermission(...).
+//                                          CaptureArtifactState before the run; verify the update
+//                                          with VerifyArtifactUpdate before claiming a file write.
 
 // Your `using` directives go here, and grow as the lessons progress.
 

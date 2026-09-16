@@ -379,6 +379,25 @@ button {
     font-size: 1rem;
 }
 
+.museum-diagram {
+    margin: 1.5rem 0;
+}
+
+.museum-diagram img {
+    display: block;
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    margin: 0 auto;
+    border-radius: 0.75rem;
+}
+
+.museum-diagram figcaption {
+    margin-top: 0.75rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
 .markdown h1,
 .markdown h2,
 .markdown h3,
@@ -451,6 +470,7 @@ button {
 }
 
 .markdown :not(pre) > code {
+    overflow-wrap: anywhere;
     padding: 0.12rem 0.36rem;
     border: 1px solid var(--border);
     border-radius: 0.32rem;

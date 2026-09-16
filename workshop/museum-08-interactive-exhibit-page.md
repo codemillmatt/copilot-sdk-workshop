@@ -1,39 +1,46 @@
-# Step 8 (optional): Publish an interactive exhibit page
+# Step 8 (optional): Create an interactive exhibit page
 
-> **Time:** 15 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
-An `exhibit.html` file you can open in a browser: the title, the narrative, the three visitor
-questions, a visible human-review caveat, and an accessible filter over the questions.
+Create a local `exhibit.html` page with the draft, visitor questions, a filter, and a human-review reminder.
+Continue where you left off from Step 7.
+You'll create a local file, not deploy a website.
 
-The model writes the file. Your application decides that it may write **exactly one** file, in
-exactly one directory, and nothing else.
+The new session exposes only `builtin:apply_patch`, a file-editing tool supplied by the Copilot CLI runtime.
+Its permission handler allows only `exhibit.html` in the application's working directory.
+Keep drafting and research permissions unchanged.
+Your code configures this HTML-writing role. The file-editing tool itself is not an agent.
 
-## One capability, one file
+Before generation, capture the output's state.
+Afterward, require a new or changed nonempty regular file before announcing an update.
+An unchanged old file is not proof of a write.
+These supplied checks preserve earlier output.
 
-This step exposes a real write capability for the first time, so the boundary has to be exact:
-
-- The session allowlist contains one entry: `builtin:apply_patch`. No shell, no MCP, no network.
-- `exhibitWritePermission(workingDirectory)` from the helpers approves a request only when it is a
-  write request and the requested file name — resolved against the working directory when relative —
-  normalizes to exactly `<workingDirectory>/exhibit.html`. Everything else is rejected with
-  feedback. Path traversal like `../../etc/hosts` normalizes somewhere else and is refused.
-- The prompt also says "do not write any other file". That sentence is a hint that helps the model
-  succeed on the first try. It is not what stops a second write. The handler is.
-
-The exhibit text goes into the prompt as **source material, not instructions**. It came from a model
-a moment ago, so treat it the way you treated Wikipedia articles in Step 7.
+The draft is source material, not new instructions.
+Permission to write one path does not prove factual accuracy, safe JavaScript, or accessible behavior.
 
 ## Add the HTML session
+
+Keep the existing session runner, research settings, and fact tool.
+Add an HTML configuration and a prompt that includes the draft.
+The prompt requests a standalone page with its styles and script inside the same file.
+
+Before the request, capture the current output file state.
+After the request, check that the same path contains a new or changed nonempty regular file.
+An unchanged old file is not evidence that this run wrote anything.
+These supplied checks do not delete an earlier output.
 
 :::language dotnet
 Open `Program.cs`. Add the HTML configuration and prompt builder:
 
+<!-- code-id: museum-08-interactive-exhibit-page-dotnet-1 -->
 ```csharp
 SessionConfig HtmlConfig(string workingDirectory) => new()
 {
     ClientName = "museum-exhibit-studio-html",
+    WorkingDirectory = workingDirectory,
     Model = SelectedModel(),
     AvailableTools = ["builtin:apply_patch"],
     OnPermissionRequest = CuratorSafety.ExhibitWritePermission(workingDirectory),
@@ -70,32 +77,36 @@ static string BuildHtmlPrompt(string exhibit)
 
 Offer the page at the end of the run, after the sources:
 
+<!-- code-id: museum-08-interactive-exhibit-page-dotnet-2 -->
 ```csharp
     Console.WriteLine();
     if (CuratorTerminal.AskYesNo("Generate an interactive exhibit.html?", defaultYes: false))
     {
+        var workingDirectory = Directory.GetCurrentDirectory();
+        var artifact = CuratorSafety.CaptureArtifactState(workingDirectory, CuratorSafety.ExhibitFileName);
         await RunSessionAsync(
-            HtmlConfig(Directory.GetCurrentDirectory()),
+            HtmlConfig(workingDirectory),
             BuildHtmlPrompt(exhibit),
             CuratorStreamer.GenerationTimeout);
-        Console.WriteLine("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+        CuratorSafety.VerifyArtifactUpdate(artifact);
+        Console.WriteLine("Verified a new or changed exhibit.html. Review its source and accessibility before use.");
     }
 
     return 0;
 ```
 
-**Look inside:** `Helpers/CuratorSafety.cs` holds `ExhibitWritePermission`, and it is the only
-thing standing between the model and your file system in this step. It precomputes
-`Path.GetFullPath` of `<workingDirectory>/exhibit.html`, then approves a request only when it is a
-`PermissionRequestWrite` whose resolved file name equals that one path. Everything else — another
-file name, a traversal like `../../etc/hosts`, a shell request, an MCP request — takes the
-`PermissionDecision.Reject` branch with feedback.
+Open `Helpers/CuratorSafety.cs`.
+`CuratorSafety.ExhibitWritePermission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 :::language nodejs
-Open `src/index.ts`. Add `exhibitFileName` and `exhibitWritePermission` to the
-helper import, then add the HTML configuration and prompt builder:
+Open `src/index.ts`.
+Add `captureArtifactState`, `verifyArtifactUpdate`, `exhibitFileName`, and `exhibitWritePermission` to the helper import.
+Add the HTML configuration and prompt builder above `main`:
 
+<!-- code-id: museum-08-interactive-exhibit-page-nodejs-1 -->
 ```typescript
 function htmlConfig(workingDirectory: string): SessionConfig {
   return {
@@ -130,29 +141,33 @@ Created ${exhibitFileName}`;
 
 Offer the page at the end of the run, after the sources:
 
+<!-- code-id: museum-08-interactive-exhibit-page-nodejs-2 -->
 ```typescript
     if (await askYesNo("\nGenerate an interactive exhibit.html?", false)) {
+      const before = await captureArtifactState(process.cwd(), exhibitFileName);
       await runSession(
         htmlConfig(process.cwd()),
         buildHtmlPrompt(exhibit),
         generationTimeoutMs,
       );
-      console.log("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+      await verifyArtifactUpdate(before);
+      console.log("Verified a new or updated exhibit.html. Review its source and open it in a browser.");
     }
 ```
 
-**Look inside:** `src/curator.ts` holds `exhibitWritePermission`, and it is the only thing standing
-between the model and your file system in this step. It precomputes `resolve(root, "exhibit.html")`
-once, then approves a request only when `request.kind === "write"` and the requested file name
-resolves against `root` to exactly that path. Everything else — another file name, a traversal like
-`../../etc/hosts`, a shell request, an MCP request — takes the `{ kind: "reject" }` branch with
-feedback.
+Open `src/curator.ts`.
+`exhibitWritePermission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 :::language python
-Open `main.py`. Add `exhibit_write_permission` to the helper import and
-`from pathlib import Path` to the top, then add the HTML configuration and prompt builder:
+Open `main.py`.
+Add `capture_artifact_state`, `verify_artifact_update`, and `exhibit_write_permission` to the helper import.
+Add `from pathlib import Path` at the top for the working-directory path.
+Add the HTML configuration and prompt builder above `main`:
 
+<!-- code-id: museum-08-interactive-exhibit-page-python-1 -->
 ```python
 def html_config(working_directory: str) -> dict[str, Any]:
     config: dict[str, Any] = {
@@ -160,6 +175,7 @@ def html_config(working_directory: str) -> dict[str, Any]:
         "available_tools": ["builtin:apply_patch"],
         "on_permission_request": exhibit_write_permission(working_directory),
         "streaming": True,
+        "working_directory": working_directory,
     }
     model = os.getenv("COPILOT_MODEL")
     if model and model.strip():
@@ -188,29 +204,31 @@ Created exhibit.html"""
 
 Offer the page at the end of the run, after the sources:
 
+<!-- code-id: museum-08-interactive-exhibit-page-python-2 -->
 ```python
         print()
         if ask_yes_no("Generate an interactive exhibit.html?", False):
+            before = capture_artifact_state(str(Path.cwd()), "exhibit.html")
             await run_session(
                 html_config(str(Path.cwd())),
                 build_html_prompt(exhibit),
                 GENERATION_TIMEOUT_SECONDS,
             )
-            print("Wrote exhibit.html. Open it in a browser to review the exhibit.")
+            verify_artifact_update(before)
+            print("Verified a new or updated exhibit.html. Review its source and open it in a browser.")
         return 0
 ```
 
-**Look inside:** `curator.py` holds `exhibit_write_permission`, and it is the only thing standing
-between the model and your file system in this step. It precomputes the resolved
-`<working_directory>/exhibit.html` path once, then approves a request only when its `kind` is
-`"write"` and the resolved requested path equals that one path. Everything else — another file
-name, a traversal like `../../etc/hosts`, a shell request, an MCP request — falls through to
-`PermissionDecisionReject` with feedback.
+Open `curator.py`.
+`exhibit_write_permission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 :::language go
 Open `main.go`. Add the HTML configuration and prompt builder:
 
+<!-- code-id: museum-08-interactive-exhibit-page-go-1 -->
 ```go
 func htmlConfig(workingDirectory string) *copilot.SessionConfig {
 	return &copilot.SessionConfig{
@@ -246,30 +264,40 @@ Created exhibit.html`, exhibit)
 
 Offer the page at the end of `run`, after the sources:
 
+<!-- code-id: museum-08-interactive-exhibit-page-go-2 -->
 ```go
-	fmt.Println()
-	if AskYesNo("Generate an interactive exhibit.html?", false) {
-		if _, err := runSession(ctx, htmlConfig(workingDirectory), buildHTMLPrompt(exhibit), GenerationTimeout); err != nil {
-			return err
-		}
-		fmt.Println("Wrote exhibit.html. Open it in a browser to review the exhibit.")
+fmt.Println()
+if AskYesNo("Generate an interactive exhibit.html?", false) {
+	before, err := CaptureArtifactState(workingDirectory, ExhibitFileName)
+	if err != nil {
+		return err
 	}
-	return nil
+	fmt.Println("Model HTML response (not file verification):")
+	if _, err := runSession(ctx, htmlConfig(workingDirectory), buildHTMLPrompt(exhibit), GenerationTimeout); err != nil {
+		return err
+	}
+	if err := VerifyArtifactUpdate(before); err != nil {
+		return err
+	}
+	fmt.Println("Verified a new or changed nonempty exhibit.html. Review its facts, HTML safety, accessibility, and external assets before use.")
+}
+return nil
 ```
 
-**Look inside:** `curator.go` holds `ExhibitWritePermission`, and it is the only thing standing
-between the model and your file system in this step. It precomputes
-`filepath.Clean(filepath.Join(workingDirectory, ExhibitFileName))` once, then approves a request
-only when `writePermissionFileName` reports a write request whose cleaned path equals that one
-path. Everything else — another file name, a traversal like `../../etc/hosts`, a shell request, an
-MCP request — falls through to `rpc.PermissionDecisionReject` with feedback.
+Open `curator.go`.
+`ExhibitWritePermission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 :::language rust
-Open `src/main.rs`. Add `EXHIBIT_FILE_NAME` and `exhibit_write_permission` to
-the crate import and `use std::path::PathBuf;` to the top, then add the HTML configuration and
-prompt builder:
+Open `src/main.rs`.
+Add `EXHIBIT_FILE_NAME`, `exhibit_write_permission`, `capture_artifact_state`, and `verify_artifact_update` to the helper import.
+Add `use std::path::PathBuf;` for the working-directory path.
+Keep `Arc` from Step 7.
+Add the HTML configuration and prompt builder above `run`:
 
+<!-- code-id: museum-08-interactive-exhibit-page-rust-1 -->
 ```rust
 fn html_config(working_directory: PathBuf) -> SessionConfig {
     let mut config = SessionConfig::default();
@@ -277,6 +305,7 @@ fn html_config(working_directory: PathBuf) -> SessionConfig {
     config.model = selected_model();
     config.available_tools = Some(vec!["builtin:apply_patch".to_owned()]);
     config.streaming = Some(true);
+    config.working_directory = Some(working_directory.clone());
     config.with_permission_handler(Arc::new(exhibit_write_permission(working_directory)))
 }
 
@@ -303,54 +332,54 @@ Created {EXHIBIT_FILE_NAME}"#
 
 Offer the page at the end of `run`, after the sources:
 
+<!-- code-id: museum-08-interactive-exhibit-page-rust-2 -->
 ```rust
-    println!();
-    if ask_yes_no("Generate an interactive exhibit.html?", false)? {
-        let working_directory = std::env::current_dir()?;
-        run_session(
-            html_config(working_directory),
-            build_html_prompt(&exhibit),
-            GENERATION_TIMEOUT,
-        )
-        .await?;
-        println!("Wrote exhibit.html. Open it in a browser to review the exhibit.");
-    }
-
-    Ok(())
+println!();
+if ask_yes_no("Generate an interactive exhibit.html?", false)? {
+    let working_directory = std::env::current_dir()?;
+    let before = capture_artifact_state(&working_directory, EXHIBIT_FILE_NAME)?;
+    println!("Model HTML response (not file verification):");
+    run_session(
+        html_config(working_directory),
+        build_html_prompt(&exhibit),
+        GENERATION_TIMEOUT,
+    )
+    .await?;
+    verify_artifact_update(&before)?;
+    println!(
+        "Verified a new or changed nonempty exhibit.html. Review its facts, HTML safety, accessibility, and external assets before use."
+    );
+}
+Ok(())
 ```
 
-**Look inside:** `src/lib.rs` holds `exhibit_write_permission` and the `ExhibitWritePermissions`
-handler behind it, and that handler is the only thing standing between the model and your file
-system in this step. It stores the normalized `<working_directory>/exhibit.html` path once, then
-approves a request only when the request kind is write and the normalized requested path equals
-that one path. Everything else — another file name, a traversal like `../../etc/hosts`, a shell
-request, an MCP request — takes the `PermissionResult::reject` branch with feedback.
+Open `src/lib.rs`.
+`exhibit_write_permission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 :::language java
 Open `src/main/java/workshop/MuseumExhibitStudio.java`. Add these imports:
 
+<!-- code-id: museum-08-interactive-exhibit-page-java-1 -->
 ```java
-import com.github.copilot.rpc.PermissionHandler;
-import com.github.copilot.rpc.PermissionRequestResult;
 import java.nio.file.Path;
-import java.util.concurrent.CompletableFuture;
 ```
 
-Current Java SDK releases may not expose the file name on a write permission request
-([github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273)). The strict handler
-is still the default; an explicit, documented opt-in flag is the only way to run the demo when the
-field is missing, and it cannot enforce the output path. Add the flag, the HTML configuration, and
-the prompt builder:
+`Path` represents the working-directory path.
+Keep the earlier permission-result imports.
+Add the HTML configuration and prompt builder below.
+The configuration uses the supplied strict permission handler directly:
 
+<!-- code-id: museum-08-interactive-exhibit-page-java-2 -->
 ```java
-    private static final String LOCAL_DEMO_WRITE_FLAG = "--allow-local-demo-write";
-
-    private static SessionConfig htmlConfig(Path workingDirectory, boolean allowLocalDemoWrite) {
+    private static SessionConfig htmlConfig(Path workingDirectory) {
         SessionConfig config = new SessionConfig()
                 .setClientName("museum-exhibit-studio-html")
+                .setWorkingDirectory(workingDirectory.toString())
                 .setAvailableTools(List.of("builtin:apply_patch"))
-                .setOnPermissionRequest(exhibitPermission(workingDirectory, allowLocalDemoWrite))
+                .setOnPermissionRequest(CuratorSafety.exhibitWritePermission(workingDirectory))
                 .setStreaming(true);
         String model = System.getenv("COPILOT_MODEL");
         if (model != null && !model.isBlank()) {
@@ -359,18 +388,7 @@ the prompt builder:
         return config;
     }
 
-    private static PermissionHandler exhibitPermission(Path workingDirectory, boolean allowLocalDemoWrite) {
-        PermissionHandler strict = CuratorSafety.exhibitWritePermission(workingDirectory);
-        if (!allowLocalDemoWrite) {
-            return strict;
-        }
-        return (request, invocation) -> {
-            if (request != null && "write".equals(request.getKind())) {
-                return CompletableFuture.completedFuture(PermissionRequestResult.approveOnce());
-            }
-            return strict.handle(request, invocation);
-        };
-    }
+
 
     public static String buildHtmlPrompt(String exhibit) {
         return """
@@ -391,34 +409,33 @@ the prompt builder:
     }
 ```
 
-Read the flag at the top of `main`, warn loudly when it is on, and offer the page after the sources:
+Inside `main`'s outer try, define the working directory and offer the page after the source
+list. Capture the file before the HTML session, verify it afterward, and only then announce success:
 
+<!-- code-id: museum-08-interactive-exhibit-page-java-3 -->
 ```java
-            boolean allowLocalDemoWrite = List.of(args).contains(LOCAL_DEMO_WRITE_FLAG);
             Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-            if (allowLocalDemoWrite) {
-                System.err.println("WARNING: Local demo write fallback enabled. This run approves write "
-                        + "requests when only builtin:apply_patch is available but cannot enforce the "
-                        + "output path. Use only in a disposable, controlled local workshop worktree.");
-            }
 ```
 
+<!-- code-id: museum-08-interactive-exhibit-page-java-4 -->
 ```java
             System.out.println();
             if (CuratorTerminal.askYesNo("Generate an interactive exhibit.html?", false)) {
+                var artifact = CuratorSafety.captureArtifactState(
+                        workingDirectory, CuratorSafety.EXHIBIT_FILE_NAME);
                 runSession(
-                        htmlConfig(workingDirectory, allowLocalDemoWrite),
+                        htmlConfig(workingDirectory),
                         buildHtmlPrompt(exhibit),
                         CuratorStreamer.GENERATION_TIMEOUT);
-                System.out.println("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+                CuratorSafety.verifyArtifactUpdate(artifact);
+                System.out.println("Verified a new or changed exhibit.html. Review its source and accessibility before use.");
             }
 ```
 
-**Look inside:** `CuratorSafety.java` holds `exhibitWritePermission`, the strict handler your
-`exhibitPermission` wraps. It normalizes `<workingDirectory>/exhibit.html` once, then approves a
-request only when the kind is `"write"` and `isExhibitWrite` resolves the requested `fileName` to
-exactly that path. A missing `fileName` field stays denied rather than defaulting to allowed, which
-is why the opt-in demo flag above exists and why it is off unless you ask for it.
+Open `src/main/java/workshop/CuratorSafety.java`.
+`CuratorSafety.exhibitWritePermission` creates the single-file permission handler.
+It compares the requested path with `exhibit.html` in the selected working directory.
+Other requests reach the rejection path.
 :::
 
 ## Run it
@@ -434,9 +451,18 @@ npm start
 ```
 :::
 :::language python
-```bash
-.venv/bin/python main.py
-```
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Run the Python museum application">
+    <button type="button" role="tab" aria-selected="true" data-tab="run-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="run-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="run-python-windows">
+    <pre><code class="language-powershell">.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="run-python-unix" hidden>
+    <pre><code class="language-bash">.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 :::
 :::language go
 ```bash
@@ -454,52 +480,56 @@ mvn compile exec:java
 ```
 :::
 
-The write lands in the working directory the program is started from, so run it from inside
-your starter directory for this step. Answer `y` at the last question:
+Run from your starter directory so the permission policy and file checks use the intended folder.
+Answer `y` at the final question.
+The following output shows a model response followed by application verification:
 
+<!-- code-id: museum-08-interactive-exhibit-page-shared-1 -->
 ```text
 Generate an interactive exhibit.html? [y/N]: y
 
 [tool:start] apply_patch
 [tool:done] success=true
 Created exhibit.html
-Wrote exhibit.html. Open it in a browser to review the exhibit.
+Verified a new or updated exhibit.html. Review its source and open it in a browser.
 ```
 
-Open `exhibit.html`. You should see the exhibit title, the narrative, the three
-questions with a working filter and a live count, and the human-review caveat. Tab through the page:
-focus should be clearly visible on the filter and any interactive elements.
+Check the application's verification message before trusting the model's completion message.
+The code calls the generated file an **artifact**: an output produced by the application.
+If an old file remains unchanged, the application reports that no output update was verified.
 
-Now try to break the boundary. Temporarily change one line of your HTML prompt to ask for a second
-file — for example `Also create notes.txt in the current working directory.` — and run again. The
-second write is rejected with:
+Review the HTML source before opening it.
+Permission to write a path does not check its JavaScript or prove it avoids external requests.
+Use only the public sample material for this exercise.
 
-```text
-This session allows writing only exhibit.html in the application working directory.
-```
+Then open `exhibit.html` in a browser and check:
 
-`exhibit.html` is still produced, `notes.txt` does not exist, and nothing you wrote in the prompt
-changed that outcome. Put the prompt back.
+1. The title, narrative, and three visitor questions appear.
+2. An accessible text filter changes the visible questions and count.
+3. The reminder about human review remains visible.
+4. Keyboard focus is visible when you press Tab through the controls.
+
+
 
 ## Check your understanding
 
-- The prompt says "do not write any other file" and the handler enforces one path. Which one did the
-  run above actually rely on, and how do you know?
-- The exhibit text is model output being fed back into another model with a write capability. Which
-  two things in this step keep that from being dangerous?
-- Your application now has three sessions with three different capability profiles. Describe each in
-  one sentence, and say why they are not one session with the union of their permissions.
+Does an existing HTML file prove this request wrote it?
 
-You have finished Museum Exhibit Studio. Your starter project now matches
-`finished/<language>/museum-exhibit-studio`: an educator picks approved facts, optionally researches
-them under a narrow allowlist, and gets grounded, structurally checked exhibit copy plus a
-publishable page — with every capability decided by your code rather than by a prompt.
+<details>
+<summary>Check your answer</summary>
+
+No. The application requires a new or content-changed nonempty regular file.
+A person must still review the source and behavior.
+
+</details>
+
+## Finish
+
+Compare your baseline with `finished/<language>/museum-exhibit-studio`.
+Keep independent practice changes separately.
+You built three distinct session profiles and checks that do not depend on trusting a model's completion claim.
+The draft and generated HTML still need human review.
 
 ## Learn more
 
-- [Pre-tool-use hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/pre-tool-use.md):
-  approving, denying, or rewriting a tool call in code, which is what the write handler does here.
-- [Hooks reference](https://github.com/github/copilot-sdk/blob/main/docs/hooks/README.md):
-  every hook the SDK exposes, and the input each one receives.
-- [Local CLI setup](https://github.com/github/copilot-sdk/blob/main/docs/setup/local-cli.md):
-  controlling which CLI the SDK starts, which is what decides where a written file lands.
+Optional reference: [Pre-tool-use hook](https://github.com/github/copilot-sdk/blob/main/docs/hooks/pre-tool-use.md).

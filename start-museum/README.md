@@ -26,8 +26,13 @@ step's code goes. Start at [`workshop/museum-00-preflight.md`](../workshop/museu
 | Java | `src/main/java/workshop/Curator*.java` | `cd start-museum/java && mvn compile && mvn exec:java` |
 
 Running the starter prints its identity and does not start Copilot or require authentication.
-Because you edit these files in place, your work shows up in `git status`. That is expected. Run
-`git checkout -- .` from the repository root to restore a clean starter.
+Because you edit these files in place, your work shows up in `git status`. That is expected.
+Before restoring anything, inspect `git status --short` and `git diff`. Copy your learner-authored
+files, including untracked practice files, to a separate backup and check that the backup opens.
+Compare your entrypoint with the finished reference first. To restart only that tracked file, use
+`git restore --source=HEAD -- <exact-file-path>` from the repository root, replacing the placeholder
+with its exact path. This discards edits to that one file, not the other projects. Do not restore
+the repository or a whole directory, and do not delete untracked work as a recovery step.
 
 Every starter already pins the dependencies the finished application needs, so you never edit a
 project manifest during the workshop. The Rust starter builds the `museum_exhibit_studio` library

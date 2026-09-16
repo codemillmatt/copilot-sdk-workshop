@@ -8,8 +8,8 @@ use async_trait::async_trait;
 use github_copilot_sdk::handler::{PermissionHandler, PermissionResult};
 use github_copilot_sdk::tool::{JsonSchema, ToolHandler, schema_for};
 use github_copilot_sdk::types::{
-    McpServerConfig, McpStdioServerConfig, PermissionRequestData, RequestId, SessionConfig,
-    SessionId, Tool, ToolInvocation,
+    McpServerConfig, McpStdioServerConfig, PermissionRequestData, PermissionRequestKind, RequestId,
+    SessionConfig, SessionId, Tool, ToolInvocation,
 };
 use github_copilot_sdk::{Client, ClientOptions, Error, ToolResult};
 use indexmap::IndexMap;
@@ -249,6 +249,15 @@ impl PermissionHandler for ScopedPermissions {
         request: PermissionRequestData,
     ) -> PermissionResult {
         let payload = permission_payload(&request.extra);
+        let kind_allowed = if request.extra.get("permissionRequest").is_some() {
+            payload
+                .and_then(|payload| payload.get("kind"))
+                .and_then(serde_json::Value::as_str)
+                == Some("mcp")
+                && (request.kind.is_none() || request.kind == Some(PermissionRequestKind::Mcp))
+        } else {
+            request.kind == Some(PermissionRequestKind::Mcp)
+        };
         let server = payload
             .and_then(|payload| payload.get("serverName"))
             .and_then(serde_json::Value::as_str);
@@ -260,7 +269,8 @@ impl PermissionHandler for ScopedPermissions {
             .and_then(|args| args.get("url"))
             .and_then(serde_json::Value::as_str)
             .and_then(|value| Url::parse(value).ok());
-        if server == Some("playwright")
+        if kind_allowed
+            && server == Some("playwright")
             && matches!(
                 tool,
                 Some("browser_navigate" | "playwright-browser_navigate")
@@ -376,11 +386,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(config).await?;
-    stream_response!(session, report_prompt(&target));
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let result = async {
+        let session = client.create_session(config).await?;
+        let streamed = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(session, report_prompt(&target));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await;
+        let stream_result = streamed
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "timeout waiting for response"))
+            .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+            .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if stream_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        stream_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 
 #[cfg(test)]

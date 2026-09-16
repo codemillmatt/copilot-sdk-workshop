@@ -1,45 +1,57 @@
 # Step 1: Your first curator session
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
-Real museum copy, in your terminal, in about ten minutes. You connect to the Copilot runtime, open
-one conversation, send a single prompt, and print what comes back.
-
-No system message. No facts catalog. No tools. No interfaces. Nothing to implement against — you
-call the SDK directly, and the pre-built curator helpers stay untouched until Step 2 needs them.
+Send a prompt through the GitHub Copilot SDK and print the model's two-sentence response about Apollo 11.
+This checks the connection before we add facts or tools.
+Continue in the starter folder from preflight.
 
 ## Meet the client and the session
 
-The [**Copilot runtime**](https://github.com/github/copilot-sdk/blob/main/docs/features/agent-loop.md)
-receives prompts, calls models, and manages tools. The **client** connects your application to that
-runtime. A **session** is one continuing conversation: it holds the messages and tool results that
-make up context.
+The **curator agent** is the model-driven worker you configure for museum drafting.
+Its behavior combines a model, instructions, conversation context, and available tools.
+It is not an extra process or a single SDK object.
+Tools are optional. The first session exposes none.
 
-Keep one client alive for a piece of work, then create a session for each independent conversation.
-Right now the application is simply `client -> session -> printed response`.
+| Component | Its job, not a separate agent |
+|---|---|
+| GitHub Copilot SDK and client | Give your code access to the Copilot CLI runtime. |
+| SDK session | Identify one conversation and its context. |
+| Copilot CLI harness | Run the model-and-tool loop and manage conversation state. |
+| Model | Generate text and tool requests from the supplied context. |
+| Tool | Execute a specific function when called. |
 
-## Answer permission requests before you send
+<figure class="museum-diagram">
+  <img src="{{ASSET_BASE_URL}}museum-client-session.svg" width="600" height="820" alt="The educator uses the application. Its SDK client connects to the Copilot CLI harness. An SDK session identifies conversation state there. The harness sends context to the model service and returns its reply.">
+  <figcaption>The curator agent uses these components. The Copilot CLI harness runs the loop, and the SDK gives your application access to it.</figcaption>
+</figure>
 
-The runtime does not decide on its own whether a tool call may run. It asks the application, and the
-session's [permission handler](https://github.com/github/copilot-sdk/blob/main/docs/hooks/pre-tool-use.md)
-is what answers. When a session is created without one, the request is not denied — it is emitted as
-an event and left pending for manual resolution, so the run stops and waits for an answer that never
-arrives.
+Your application creates a session, sends a **prompt** (the request), prints the reply, then releases its resources.
+Separate conversations can use the same model.
 
-Give this first session an approve-all handler so every request has an answer. It approves requests
-when managed settings are disabled, and it is a default rather than a safety measure: Step 5 shows
-what actually constrains this session, and Steps 7 and 8 replace it with narrow, scoped handlers.
+This first session has an **explicit empty tool allowlist** and rejects unexpected permission requests.
+The list exposes no tools. The rejection callback answers authorization requests rather than leaving them pending.
+Authentication to the model service is a separate concern.
 
 ## Write the session
+
+Read the replacement once before running it.
+Find the client, the session settings, the prompt, and the cleanup code.
+The cleanup releases resources when the request finishes or fails.
 
 :::language dotnet
 Open `Program.cs` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-dotnet-1 -->
 ```csharp
+using System;
+using System.Threading.Tasks;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== Museum Exhibit Studio ===");
 Console.WriteLine();
@@ -50,176 +62,209 @@ await client.StartAsync();
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
     ClientName = "museum-exhibit-studio",
-    OnPermissionRequest = PermissionHandler.ApproveAll
+    AvailableTools = [],
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("This session does not allow unexpected permission requests."))
 });
 
 var response = await session.SendAndWaitAsync(
-    "Write two sentences of museum wall text about the Apollo 11 Moon landing.");
+    "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+    timeout: TimeSpan.FromSeconds(120));
 
-if (response is null)
+if (string.IsNullOrWhiteSpace(response?.Data.Content))
 {
     throw new InvalidOperationException("The curator returned no content.");
 }
 
 Console.WriteLine(response.Data.Content);
 
-await client.StopAsync();
+#pragma warning restore GHCP001
 ```
 
-`SendAndWaitAsync` blocks until the session goes idle, so you get the finished answer in one call.
-`await using` disposes the session and the client on the way out. `PermissionHandler.ApproveAll`
-comes from `GitHub.Copilot.Rpc`, which is why the second `using` is there.
+`StartAsync` connects the client to the runtime.
+`CreateSessionAsync` creates the conversation with the supplied settings.
+`SendAndWaitAsync` sends the prompt and waits for the completed response.
+The `await using` scopes release the session before the client, including on failure.
 
-The pre-built helpers you start calling in Step 2 live in `Helpers/CuratorFacts.cs`,
-`Helpers/CuratorStreamer.cs`, `Helpers/CuratorValidation.cs`, `Helpers/CuratorSafety.cs`, and
-`Helpers/CuratorTerminal.cs`. You never edit those files — you read them.
+The rejection callback uses `PermissionDecision` from `GitHub.Copilot.Rpc`.
+The narrow `GHCP001` opt-in acknowledges that the pinned SDK marks this API as experimental.
+Keep it with the example.
+
+The supplied helpers live in `Helpers/CuratorFacts.cs`, `Helpers/CuratorStreamer.cs`,
+`Helpers/CuratorValidation.cs`, `Helpers/CuratorSafety.cs`, and `Helpers/CuratorTerminal.cs`.
+You start using them in Step 2. Keep those files unchanged during the workshop.
 :::
 
 :::language nodejs
 Open `src/index.ts` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-nodejs-1 -->
 ```typescript
-import { approveAll, CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient } from "@github/copilot-sdk";
 
 async function main(): Promise<void> {
   console.log("=== Museum Exhibit Studio ===");
   console.log();
 
   const client = new CopilotClient();
-  await client.start();
-  const session = await client.createSession({
-    clientName: "museum-exhibit-studio",
-    onPermissionRequest: approveAll,
-  });
-
-  const response = await session.sendAndWait({
-    prompt: "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
-  });
-  console.log(response?.data && "content" in response.data ? response.data.content : response);
-
-  await session.disconnect();
-  await client.stop();
+  try {
+    await client.start();
+    const session = await client.createSession({ availableTools: [],
+      clientName: "museum-exhibit-studio",
+      onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
+    });
+    try {
+      const response = await session.sendAndWait({
+        prompt: "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+      });
+      console.log(response?.data && "content" in response.data ? response.data.content : response);
+    } finally {
+      await session.disconnect();
+    }
+  } finally {
+    await client.stop();
+  }
 }
 
 void main();
 ```
 
-`sendAndWait` blocks until the session goes idle, so you get the finished answer in one call.
-`approveAll` is imported from the SDK alongside `CopilotClient`.
+`client.start()` connects the client to the runtime.
+`createSession` creates the conversation using the settings in its argument.
+`sendAndWait` sends the prompt and waits for the completed response.
+The final `console.log` prints the returned content when it is present.
 
-`src/curator.ts` beside this file is the pre-built helper module you start calling in Step 2. You
-never edit it — you read it.
+The `finally` blocks release the session and client when the work ends or throws an error.
+`clientName` labels this application. It does not identify the conversation.
+
+The supplied helper module is `src/curator.ts`.
+You start using it in Step 2. Keep it unchanged during the workshop.
 :::
 
 :::language python
 Open `main.py` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-python-1 -->
 ```python
 import asyncio
 
-from copilot import CopilotClient, PermissionHandler
-from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
+from copilot import CopilotClient
+from copilot.rpc import PermissionDecisionReject
+from copilot.session_events import AssistantMessageData
 
 
 async def main() -> None:
     print("=== Museum Exhibit Studio ===")
-    print()
-
     async with CopilotClient() as client:
         async with await client.create_session(
-            client_name="museum-exhibit-studio",
-            on_permission_request=PermissionHandler.approve_all,
+            available_tools=[],
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(
+                feedback="This session does not allow that permission request."
+            ),
         ) as session:
-            done = asyncio.Event()
-            error: RuntimeError | None = None
-
-            def on_event(event) -> None:
-                nonlocal error
-                match event.data:
-                    case AssistantMessageData(content=content):
-                        print(content)
-                    case SessionErrorData(message=message):
-                        error = RuntimeError(message)
-                        done.set()
-                    case SessionIdleData():
-                        done.set()
-
-            session.on(on_event)
-            await session.send(
-                "Write two sentences of museum wall text about the Apollo 11 Moon landing."
+            response = await session.send_and_wait(
+                "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+                timeout=120,
             )
-            await done.wait()
-            if error is not None:
-                raise error
+            if (response is None or not isinstance(response.data, AssistantMessageData)
+                    or not response.data.content.strip()):
+                raise RuntimeError("Copilot completed without an assistant response.")
+            print(response.data.content)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Python listens for session events rather than calling one blocking helper. Print the assistant
-message, treat a session error as a failure, and wait for idle before exiting. Step 2 replaces this
-whole listener with one helper call.
+The first `async with` starts the client and arranges its cleanup.
+`create_session` creates a conversation with the supplied settings.
+`send_and_wait` sends the prompt and returns a response event.
+The code checks that its data contains nonblank assistant text before printing it.
 
-`curator.py` beside this file is the pre-built helper module that owns that replacement. You never
-edit it — you read it.
+The nested context manager releases the session before the client, including on failure.
+The supplied helper module is `curator.py`.
+You start using its streaming function in Step 2. Keep the helper unchanged.
 :::
 
 :::language go
 Open `main.go` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-go-1 -->
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/github/copilot-sdk/go/rpc"
+	"os"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	fmt.Println("=== Museum Exhibit Studio ===")
 	fmt.Println()
 
 	ctx := context.Background()
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(ctx); err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = client.Stop() }()
 
 	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		ClientName:          "museum-exhibit-studio",
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		AvailableTools: []string{},
+		ClientName:     "museum-exhibit-studio",
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = session.Disconnect() }()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	response, err := session.SendAndWait(ctx, copilot.MessageOptions{
 		Prompt: "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if response == nil {
-		panic("The curator returned no content.")
+		return errors.New("The curator returned no content.")
 	}
 	if message, ok := response.Data.(*copilot.AssistantMessageData); ok {
 		fmt.Println(message.Content)
 	}
+	return nil
 }
 ```
 
-`curator.go` is already in this same `main` package, so its helpers are in scope the moment you
-need them. `SendAndWait` blocks until the session goes idle.
+`NewClient` creates the client, and `Start` connects it to the runtime.
+`CreateSession` creates the conversation.
+`SendAndWait` sends the prompt and waits for completion.
+The code checks the response type before printing its content.
+
+The `defer` calls arrange cleanup when `run` returns.
+`main` reports any error after that cleanup.
+Later edits belong inside `run`, not the small `main` wrapper.
+The supplied `curator.go` file shares this package. Keep it unchanged.
+
 :::
 
 :::language rust
 Open `src/main.rs` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-rust-1 -->
 ```rust
 use github_copilot_sdk::permission;
 use github_copilot_sdk::types::{MessageOptions, SessionConfig};
@@ -231,48 +276,77 @@ async fn main() -> Result<(), RuntimeError> {
     println!("=== Museum Exhibit Studio ===");
     println!();
 
-    let client = Client::start(ClientOptions::default()).await?;
-    let mut config = SessionConfig::default().with_permission_handler(permission::approve_all());
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
     config.client_name = Some("museum-exhibit-studio".to_owned());
-    let session = client.create_session(config).await?;
+    config.available_tools = Some(vec![]);
 
-    let response = session
-        .send_and_wait(MessageOptions::new(
-            "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
-        ))
-        .await?;
+    let client = Client::start(ClientOptions::default()).await?;
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = async {
+            let response = session
+                .send_and_wait(MessageOptions::new(
+                    "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+                ))
+                .await?;
 
-    if let Some(message) = response {
-        if let Some(content) = message.data.get("content").and_then(|value| value.as_str()) {
-            println!("{content}");
+            if let Some(message) = response {
+                if let Some(content) = message.data.get("content").and_then(|value| value.as_str())
+                {
+                    println!("{content}");
+                }
+            }
+            Ok::<(), RuntimeError>(())
         }
+        .await;
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as RuntimeError);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
     }
-
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as RuntimeError);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 
-`src/lib.rs` is the `museum_exhibit_studio` library crate that ships the pre-built helpers, and you
-never edit it. You import one name from it today: `RuntimeError`, the crate's alias for
-`Box<dyn Error + Send + Sync>`. Every helper you call from Step 2 onward reports failure with that
-type, so `main` returns it from the start and `?` keeps working as the lessons grow.
+`Client::start` creates the runtime connection.
+`create_session` creates the conversation.
+`send_and_wait` sends the prompt and waits for the completed response.
+The code handles that result before returning so it can disconnect the session and stop the client.
 
-`with_permission_handler` returns the updated config, so keep the remaining fields set on the value
-it hands back.
+The supplied library crate is `museum_exhibit_studio`, defined in `src/lib.rs`.
+`RuntimeError` is its alias for `Box<dyn Error + Send + Sync>`.
+It gives these examples a common error type for the `?` operator.
+Keep the library unchanged during the workshop.
+
+`with_permission_handler` returns the updated configuration.
+Set the remaining fields on that returned value, as shown.
 :::
 
 :::language java
 Open `src/main/java/workshop/MuseumExhibitStudio.java` and **replace the entire file**:
 
+<!-- code-id: museum-01-first-curator-session-java-1 -->
 ```java
 package workshop;
 
 import com.github.copilot.CopilotClient;
 import com.github.copilot.rpc.MessageOptions;
-import com.github.copilot.rpc.PermissionHandler;
 import com.github.copilot.rpc.SessionConfig;
+import com.github.copilot.rpc.PermissionRequestResult;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class MuseumExhibitStudio {
     private MuseumExhibitStudio() {
@@ -281,34 +355,38 @@ public final class MuseumExhibitStudio {
     public static void main(String[] args) throws Exception {
         System.out.println("=== Museum Exhibit Studio ===");
         System.out.println();
-
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(new SessionConfig()
+            var config = new SessionConfig()
                     .setClientName("museum-exhibit-studio")
-                    .setOnPermissionRequest(PermissionHandler.APPROVE_ALL)).get();
-            try {
+                    .setAvailableTools(List.of())
+                    .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")));
+            try (var session = client.createSession(config).get()) {
                 var response = session.sendAndWait(new MessageOptions().setPrompt(
-                        "Write two sentences of museum wall text about the Apollo 11 Moon landing.")).get();
-                if (response == null) {
-                    throw new IllegalStateException("The curator returned no content.");
+                        "Write two sentences of museum wall text about the Apollo 11 Moon landing."), 120_000).get();
+                String content = response == null || response.getData() == null
+                        ? null : response.getData().content();
+                if (content == null || content.isBlank()) {
+                    throw new IllegalStateException("Copilot completed without an assistant response.");
                 }
-                System.out.println(response.getData().content());
-            } finally {
-                session.close();
-                client.stop().get();
+                System.out.println(content);
             }
         }
     }
 }
 ```
 
-`sendAndWait` blocks until the session goes idle. The try-with-resources block closes the client
-when `main` exits. `PermissionHandler.APPROVE_ALL` comes from `com.github.copilot.rpc`.
+`client.start()` connects the client to the runtime.
+`createSession` creates the conversation.
+`sendAndWait` sends the prompt and returns a future for completion.
+The call to `get()` waits for that future. The response checks reject missing or blank text.
 
-The pre-built helpers you start calling in Step 2 sit beside your file in
-`src/main/java/workshop/`: `CuratorFacts.java`, `CuratorStreamer.java`, `CuratorValidation.java`,
-`CuratorSafety.java`, and `CuratorTerminal.java`. You never edit those files — you read them.
+Nested try-with-resources scopes release the session before the client, including on failure.
+The supplied helpers are in `src/main/java/workshop/`.
+They include `CuratorFacts.java`, `CuratorStreamer.java`, `CuratorValidation.java`,
+`CuratorSafety.java`, and `CuratorTerminal.java`.
+You start using them in Step 2. Keep them unchanged.
 :::
 
 ## Run it
@@ -324,14 +402,27 @@ npm start
 ```
 :::
 :::language python
-```bash
-.venv/bin/python main.py
-```
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Run the Python museum application">
+    <button type="button" role="tab" aria-selected="true" data-tab="run-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="run-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="run-python-windows">
+    <pre><code class="language-powershell">.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="run-python-unix" hidden>
+    <pre><code class="language-bash">.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 :::
 :::language go
 ```bash
 go run .
 ```
+
+The `main` wrapper reports errors after `run` performs cleanup.
+Keep later orchestration edits inside `run`.
+
 :::
 :::language rust
 ```bash
@@ -346,6 +437,7 @@ mvn compile exec:java
 
 Your exact wording will vary, but the output has this shape:
 
+<!-- code-id: museum-01-first-curator-session-shared-2 -->
 ```text
 === Museum Exhibit Studio ===
 
@@ -353,26 +445,30 @@ The Apollo 11 mission carried three astronauts toward the Moon in July 1969. Day
 two of them stepped onto its surface while the world listened.
 ```
 
-Two sentences of museum-ish prose arrive after a short pause. Nothing streams yet, no tone is
-enforced yet, and nothing stops the model from reaching past the subject you asked about. Those are
-the next three steps.
+Check that a response appears and the process finishes.
+Your wording can differ from the example. The model has no approved fact list yet,
+so do not use this response as a museum label.
+
+If sign-in fails, return to preflight's account instructions.
+If the Copilot CLI runtime cannot start, check its installation.
+Keep permission rejection in place while diagnosing the connection.
+
+Next we'll make the response visible while it arrives, rather than waiting for all the text.
 
 ## Check your understanding
 
-- What does the session hold that the client does not?
-- The response arrived all at once after a pause. Which part of the current code causes that?
-- The session answered every permission request instead of leaving it pending. Did that make the
-  session safer, or only make it able to finish?
-- Nothing in this step restricts what the model may claim about Apollo 11. What is the only thing
-  keeping the answer roughly on topic right now?
+Which object connects to the Copilot CLI harness, and which identifies a conversation? Is either object the complete agent?
+
+<details>
+<summary>Check your answer</summary>
+
+The SDK client manages the connection. The session identifies a conversation managed by the Copilot CLI runtime.
+Neither is the complete agent or the model.
+
+</details>
 
 ## Learn more
 
-- [Build your first Copilot-powered app](https://docs.github.com/en/copilot/how-tos/copilot-sdk/getting-started):
-  GitHub's tutorial for the same first client, session, and prompt.
-- [Session resume and persistence](https://github.com/github/copilot-sdk/blob/main/docs/features/session-persistence.md):
-  what a session keeps, and how to pick a conversation back up later.
-- [Authentication](https://github.com/github/copilot-sdk/blob/main/docs/auth/README.md):
-  the credentials a client can use once you move past `copilot login`.
+Optional reference: [Build your first app with the GitHub Copilot SDK](https://docs.github.com/en/copilot/how-tos/copilot-sdk/getting-started).
 
 Continue to [Stream the curator](museum-02-stream-the-curator.md).

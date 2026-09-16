@@ -1,10 +1,12 @@
-import { approveAll, CopilotClient, type SessionConfig } from "@github/copilot-sdk";
+import { CopilotClient, type SessionConfig } from "@github/copilot-sdk";
 import {
   approvedFactLookupName,
   askLine,
   askYesNo,
   boundFacts,
   closeTerminal,
+  captureArtifactState,
+  denyUnexpectedPermission,
   createApprovedFactLookup,
   exhibitFileName,
   exhibitWritePermission,
@@ -16,6 +18,7 @@ import {
   researchTimeoutMs,
   streamExhibit,
   validateExhibit,
+  verifyArtifactUpdate,
   wikipediaPermissionHandler,
   wikipediaServer,
   wikipediaTools,
@@ -106,7 +109,7 @@ function generationConfig(approvedFacts: Iterable<string>): SessionConfig {
   return {
     clientName: "museum-exhibit-studio",
     model: selectedModel(),
-    onPermissionRequest: approveAll,
+    onPermissionRequest: denyUnexpectedPermission,
     tools: [createApprovedFactLookup(approvedFacts)],
     availableTools: [approvedFactLookupName],
     streaming: true,
@@ -188,7 +191,7 @@ async function main(): Promise<void> {
       approvedFacts = boundFacts(await readFacts());
     }
 
-    let consultedSources: readonly WikipediaSource[] = [];
+    let modelReportedSources: readonly WikipediaSource[] = [];
     if (await askYesNo("Research the subject on Wikipedia first?", false)) {
       console.log();
       try {
@@ -197,7 +200,10 @@ async function main(): Promise<void> {
           buildResearchPrompt(approvedFacts),
           researchTimeoutMs,
         );
-        consultedSources = extractSources(research).sources;
+        modelReportedSources = extractSources(research).sources;
+        if (modelReportedSources.length === 0) {
+          console.log("No usable model-reported citations were returned; the research remains unverified.");
+        }
         console.log("Research notes are background for you only. They are not added to the approved facts.");
       } catch (error) {
         console.log(`Wikipedia research did not complete: ${describe(error)}`);
@@ -214,18 +220,21 @@ async function main(): Promise<void> {
     console.log();
     console.log(formatValidation(validateExhibit(exhibit)));
 
-    if (consultedSources.length > 0) {
-      console.log("\nConsulted Wikipedia sources:");
-      consultedSources.forEach((source) => console.log(`- ${source.title}: ${source.url}`));
+    if (modelReportedSources.length > 0) {
+      console.log("\nModel-reported Wikipedia sources (unverified):");
+      modelReportedSources.forEach((source) => console.log(`- ${source.title}: ${source.url}`));
+      console.log("A human must verify these links and the claims they support; parsing does not prove they were consulted.");
     }
 
     if (await askYesNo("\nGenerate an interactive exhibit.html?", false)) {
+      const before = await captureArtifactState(process.cwd(), exhibitFileName);
       await runSession(
         htmlConfig(process.cwd()),
         buildHtmlPrompt(exhibit),
         generationTimeoutMs,
       );
-      console.log("Wrote exhibit.html. Open it in a browser to review the exhibit.");
+      await verifyArtifactUpdate(before);
+      console.log("Verified a new or updated exhibit.html. Review its source and open it in a browser.");
     }
   } catch (error) {
     const message = describe(error);

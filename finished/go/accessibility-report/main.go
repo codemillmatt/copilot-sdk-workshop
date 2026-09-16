@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -185,9 +186,15 @@ func printResponse(session *copilot.Session, prompt string) error {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "Usage: go run . <http-or-https-url>")
-		return
+		return fmt.Errorf("Usage: go run . <http-or-https-url>")
 	}
 	target := os.Args[1]
 	if !strings.Contains(target, "://") {
@@ -195,13 +202,12 @@ func main() {
 	}
 	parsed, err := url.ParseRequestURI(target)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		fmt.Fprintln(os.Stderr, "Enter an absolute HTTP or HTTPS URL.")
-		return
+		return fmt.Errorf("Enter an absolute HTTP or HTTPS URL.")
 	}
 
 	workingDirectory, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 	lookup.SkipPermission = true
@@ -209,10 +215,10 @@ func main() {
 	readSnapshot.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 		Streaming:           copilot.Bool(true),
 		Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -228,10 +234,8 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
-	if err := printResponse(session, reportPrompt(target)); err != nil {
-		panic(err)
-	}
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
+	return printResponse(session, reportPrompt(target))
 }

@@ -122,7 +122,7 @@
                 navTitle: 'First session',
                 kind: 'core',
                 number: 1,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: '02-streaming',
@@ -131,7 +131,7 @@
                 navTitle: 'Streaming',
                 kind: 'core',
                 number: 2,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: '03-local-tool',
@@ -140,7 +140,7 @@
                 navTitle: 'Local tool',
                 kind: 'core',
                 number: 3,
-                time: '15 min'
+                time: 'Self-paced'
             },
             {
                 id: '04-mcp-safety',
@@ -149,7 +149,7 @@
                 navTitle: 'MCP and permissions',
                 kind: 'core',
                 number: 4,
-                time: '20 min'
+                time: 'Self-paced'
             },
             {
                 id: '05-combine-tools',
@@ -158,7 +158,7 @@
                 navTitle: 'Combine tools',
                 kind: 'core',
                 number: 5,
-                time: '15 min'
+                time: 'Self-paced'
             },
             {
                 id: '06-structured-report',
@@ -167,7 +167,7 @@
                 navTitle: 'Structured report',
                 kind: 'core',
                 number: 6,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: '07-run-explain',
@@ -176,7 +176,7 @@
                 navTitle: 'Run and explain',
                 kind: 'core',
                 number: 7,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: '08-model-selection',
@@ -184,7 +184,7 @@
                 title: 'Select a model',
                 navTitle: 'Model selection',
                 kind: 'optional',
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: '09-interactive-html-report',
@@ -192,7 +192,7 @@
                 title: 'Generate an interactive HTML report',
                 navTitle: 'Interactive report',
                 kind: 'optional',
-                time: '15 min'
+                time: 'Self-paced'
             }
         ];
 
@@ -212,7 +212,7 @@
                 navTitle: 'First session',
                 kind: 'core',
                 number: 1,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-02-stream-the-curator',
@@ -221,7 +221,7 @@
                 navTitle: 'Streaming',
                 kind: 'core',
                 number: 2,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-03-curator-voice',
@@ -230,7 +230,7 @@
                 navTitle: 'Curator voice',
                 kind: 'core',
                 number: 3,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-04-approved-facts',
@@ -239,7 +239,7 @@
                 navTitle: 'Approved facts',
                 kind: 'core',
                 number: 4,
-                time: '15 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-05-guardrails',
@@ -248,7 +248,7 @@
                 navTitle: 'Guardrails',
                 kind: 'core',
                 number: 5,
-                time: '15 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-06-prove-the-structure',
@@ -257,7 +257,7 @@
                 navTitle: 'Structural checks',
                 kind: 'core',
                 number: 6,
-                time: '10 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-07-wikipedia-research',
@@ -266,16 +266,16 @@
                 navTitle: 'Wikipedia research',
                 kind: 'core',
                 number: 7,
-                time: '20 min'
+                time: 'Self-paced'
             },
             {
                 id: 'museum-08-interactive-exhibit-page',
                 file: 'workshop/museum-08-interactive-exhibit-page.md',
-                title: 'Publish an interactive exhibit page',
+                title: 'Create an interactive exhibit page',
                 navTitle: 'Exhibit page',
                 kind: 'optional',
                 number: 8,
-                time: '15 min'
+                time: 'Self-paced'
             }
         ];
 
@@ -544,12 +544,14 @@
 
         function processMarkdown(markdown) {
             const targetUrl = new URL('target-app/', getSiteRootUrl()).href;
+            const assetBaseUrl = new URL('assets/', getSiteRootUrl()).href;
             return WorkshopMarkdown.preprocessLanguageDirectives(
                 markdown,
                 getSelectedLanguage()?.id,
                 WorkshopLanguages.getLanguage
             )
                 .replaceAll('{{TARGET_APP_URL}}', targetUrl)
+                .replaceAll('{{ASSET_BASE_URL}}', assetBaseUrl)
                 .replace(/\]\(([a-z0-9-]+)\.md\)/g, (match, stepId) => {
                     const target = steps.find(step => step.id === stepId);
                     return target ? `](${stepUrl(target)})` : match;

@@ -26,25 +26,19 @@ Prompt guidance is not an authorization boundary, so the application also:
 
 - limits generation to exactly one application-owned tool, `approved_fact_lookup`, which returns the bounded approved facts, backed by a reject-all permission handler for everything else;
 - limits research to the configured Wikipedia MCP server and `wikipedia-search` / `wikipedia-readArticle` through a deny-by-default permission handler;
-- treats Wikipedia output as background notes only, extracts cited sources from a trailing `## Sources` section, and never merges research into the approved facts;
+- treats Wikipedia output as background notes only, displays **Model-reported Wikipedia sources (unverified):** from a trailing `## Sources` section, and never merges research into the approved facts;
 - bounds input to 20 facts of at most 500 characters each before every model send;
 - uses explicit timeouts, rejects blank exhibit output, and disconnects sessions / stops clients on success and failure;
 - checks one H1, required sections, a 100-140-word narrative, exactly three numbered questions ending in `?`, and prohibited software vocabulary; and
 - optionally allows `builtin:apply_patch` to write only `exhibit.html` in the application working directory.
 
-The validator cannot prove semantic factual grounding. Generated claims still require human review or a separate evaluator.
+The validator is advisory and cannot prove semantic factual grounding. Generated claims require human review. Verify each model-reported URL, article, and supporting claim yourself: parsing links does not prove that they exist or were consulted. Successful research without parseable citations produces an explicit notice.
 
-## Optional HTML capstone and Java SDK limitation
+## Optional HTML extension
 
-When prompted, answer yes to generate `exhibit.html`. The default Java permission handler approves a write only when the SDK exposes a write request whose normalized `fileName` is exactly `exhibit.html` in this directory.
+When prompted, answer yes to generate `exhibit.html`. The pinned SDK 1.0.11 preserves permission extension fields. The handler approves only the exact normalized `fileName` in the application working directory; unknown, missing, malformed, and other-target requests stay denied.
 
-Current Java SDK releases may not surface those write-request fields (see <https://github.com/github/copilot-sdk/issues/2273>). For the controlled local workshop only, run with:
-
-```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-write"
-```
-
-That fallback is limited by the app to the `write` permission kind while only `builtin:apply_patch` is available, but it cannot enforce the output path. Do not use the fallback for production, shared, or untrusted worktrees.
+Before the HTML session, the application captures the target's content hash. It reports a verified update only for a newly created or content-changed, nonempty regular nonsymlink file. Missing, empty, unchanged, directory, or symlink output cannot claim success. Previous files are never deleted to force an update. File verification does not establish factual accuracy, HTML safety, accessibility, or absence of external assets: inspect the source and review the page manually.
 
 This is the application a learner ends up with after the museum lessons, not a separate reference
 architecture. The entrypoint keeps one small session runner that starts the client, creates the

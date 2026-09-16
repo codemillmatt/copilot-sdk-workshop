@@ -7,8 +7,6 @@
     const startLink = document.getElementById('startWorkshopLink');
     const docsLink = document.getElementById('sdkDocsLink');
     const summary = document.getElementById('languageSummary');
-    const installCommand = document.getElementById('installCommand');
-    const runtimeNote = document.getElementById('runtimeNote');
     const workshopInputs = [...document.querySelectorAll('input[name="workshop"]')];
     const targetAppLink = document.getElementById('targetAppLink');
     const previewTitle = document.getElementById('previewTitle');
@@ -19,32 +17,34 @@
     const workshops = {
         sdlc: {
             name: 'Accessibility reviewer',
-            previewTitle: 'accessibility-reviewer',
-            preview: `URL → Playwright inspection
-     → WCAG lookup
-     → structured report
+            previewTitle: 'Accessibility Reviewer',
+            preview: `You provide
+A public practice-page URL.
 
-[tool] playwright-browser_navigate
-[tool] accessibility_rule_lookup
+The agent requests
+Browser evidence and guidance from your
+application's accessibility catalog.
 
-Finding
-The name input has no accessible name.`,
-            guidance: 'Build an SDLC developer tool in a 90-minute core workshop.'
+You inspect
+A report connecting observed problems
+to suggested fixes and review limits.`,
+            guidance: 'Start with the accessibility project introduction and machine setup.'
         },
         museum: {
             name: 'Museum Exhibit Studio',
-            previewTitle: 'museum-exhibit-studio',
-            preview: `Approved facts → curator session
-               → exhibit validation
-               → visitor-ready copy
+            previewTitle: 'Museum Exhibit Studio',
+            preview: `You provide
+A small list of approved museum facts.
 
-Available tools: []
-System message: replace
+The agent requests
+Those facts from your application
+and writes an exhibit draft.
 
-# Journey to the Moon
-## Narrative
-## Visitor questions`,
-            guidance: 'Build a non-SDLC curator tool in a 90-minute core workshop.'
+You inspect
+A title, a short narrative, and three
+visitor questions, with format checks.
+You review every claim before use.`,
+            guidance: 'Start with the museum scenario, then prepare your machine.'
         }
     };
 
@@ -86,12 +86,10 @@ System message: replace
             docsLink.removeAttribute('href');
             docsLink.setAttribute('aria-disabled', 'true');
             summary.textContent = workshop
-                ? `Now choose a language for ${workshop.name}.`
-                : 'Choose a workshop first, then select its implementation language.';
-            installCommand.textContent = '';
-            runtimeNote.textContent = '';
+                ? `Choose a language you know for ${workshop.name}.`
+                : 'Choose a project, then select the language you want to use.';
             startGuidance.textContent = workshop?.guidance ??
-                'Choose a workshop and language. No prior agent or SDK experience required.';
+                'Choose a project and language to open its introduction and setup instructions.';
             return;
         }
 
@@ -99,11 +97,9 @@ System message: replace
         docsLink.removeAttribute('aria-disabled');
         docsLink.textContent = `${language.displayName} SDK docs ↗`;
         summary.textContent = workshop
-            ? `${workshop.name} will use the ${language.displayName} SDK.`
-            : 'Choose a workshop to continue.';
-        installCommand.textContent = language.installCommand;
-        runtimeNote.textContent = language.runtimeNote;
-        startGuidance.textContent = workshop?.guidance ?? 'Choose a workshop to continue.';
+            ? `You'll follow the ${language.displayName} instructions for ${workshop.name}. Setup covers the tools this project needs.`
+            : 'Choose a project to continue.';
+        startGuidance.textContent = workshop?.guidance ?? 'Choose a project to continue.';
     }
 
     function selectWorkshop(workshopId) {
@@ -112,8 +108,8 @@ System message: replace
             option.classList.toggle('selected', option.dataset.workshop === selectedWorkshopId);
         });
         const workshop = selectedWorkshopId ? workshops[selectedWorkshopId] : null;
-        previewTitle.textContent = workshop?.previewTitle ?? 'workshop-preview';
-        preview.textContent = workshop?.preview ?? 'Select a workshop to preview its agent flow.';
+        previewTitle.textContent = workshop?.previewTitle ?? 'Your application';
+        preview.textContent = workshop?.preview ?? 'Choose a project to see its input, its work, and the result you will inspect.';
         updateSelection(languageInputs.find(input => input.checked)?.value ?? null);
         if (workshop) {
             languageInputs[0].focus();

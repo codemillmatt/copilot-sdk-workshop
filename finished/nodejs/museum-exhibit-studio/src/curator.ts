@@ -8,6 +8,49 @@ import type {
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface, type Interface } from "node:readline/promises";
 import { resolve } from "node:path";
+import { constants } from "node:fs";
+import { lstat, open } from "node:fs/promises";
+import { createHash } from "node:crypto";
+
+export const denyUnexpectedPermission: PermissionHandler = () => ({
+  kind: "reject",
+  feedback: "This session does not allow that permission request.",
+});
+
+export type ArtifactState = {
+  readonly path: string;
+  readonly fingerprint: string | null;
+};
+
+async function artifactFingerprint(path: string): Promise<string | null> {
+  let file;
+  try {
+    if (!(await lstat(path)).isFile()) throw new Error("The output must be a regular file, not a symbolic link.");
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    if (!(await file.stat()).isFile()) throw new Error("The output must be a regular file.");
+    const content = await file.readFile();
+    return content.length ? createHash("sha256").update(content).digest("hex") : "";
+  } finally {
+    await file.close();
+  }
+}
+
+export async function captureArtifactState(workingDirectory: string, fileName: string): Promise<ArtifactState> {
+  const path = resolve(workingDirectory, fileName);
+  return { path, fingerprint: await artifactFingerprint(path) };
+}
+
+export async function verifyArtifactUpdate(before: ArtifactState): Promise<void> {
+  const fingerprint = await artifactFingerprint(before.path);
+  if (!fingerprint || fingerprint === before.fingerprint) {
+    throw new Error(`No output update was verified for ${before.path}. Review any existing file.`);
+  }
+}
 
 export const apollo11Facts = [
   "Apollo 11 launched July 16, 1969.",
@@ -105,9 +148,12 @@ export async function streamExhibit(
         receivedDelta = true;
         content += event.data.deltaContent;
         process.stdout.write(event.data.deltaContent);
-      } else if (event.type === "assistant.message" && !receivedDelta) {
-        content += event.data.content;
-        process.stdout.write(event.data.content);
+      } else if (event.type === "assistant.message") {
+        if (!receivedDelta) {
+          content += event.data.content;
+          process.stdout.write(event.data.content);
+        }
+        receivedDelta = false;
       } else if (event.type === "tool.execution_start") {
         console.log(`\n[tool:start] ${event.data.toolName}`);
       } else if (event.type === "tool.execution_complete") {
@@ -280,30 +326,26 @@ export type ExtractedSources = {
 };
 
 export function extractSources(content: string): ExtractedSources {
-  try {
-    const lines = content.replace(/\r\n?/g, "\n").split("\n");
-    let sourcesIndex = -1;
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      if (lines[index]?.trim().toLocaleLowerCase() === "## sources") {
-        sourcesIndex = index;
-        break;
-      }
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
+  let sourcesIndex = -1;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index]?.trim().toLocaleLowerCase() === "## sources") {
+      sourcesIndex = index;
+      break;
     }
-    if (sourcesIndex < 0) return { body: content.trimEnd(), sources: [] };
-
-    const sources = lines.slice(sourcesIndex + 1).flatMap((line) => {
-      const match = line.match(/^\s*-\s*(.+?):\s*(https:\/\/\S+)\s*$/u);
-      if (!match?.[1] || !match[2]) return [];
-      return [{ title: match[1].trim(), url: match[2].trim() }];
-    });
-
-    return {
-      body: lines.slice(0, sourcesIndex).join("\n").trimEnd(),
-      sources,
-    };
-  } catch {
-    return { body: content, sources: [] };
   }
+  if (sourcesIndex < 0) return { body: content.trimEnd(), sources: [] };
+
+  const sources = lines.slice(sourcesIndex + 1).flatMap((line) => {
+    const match = line.match(/^\s*-\s*(.+?):\s*(https:\/\/\S+)\s*$/u);
+    if (!match?.[1] || !match[2]) return [];
+    return [{ title: match[1].trim(), url: match[2].trim() }];
+  });
+
+  return {
+    body: lines.slice(0, sourcesIndex).join("\n").trimEnd(),
+    sources,
+  };
 }
 
 export const exhibitFileName = "exhibit.html";

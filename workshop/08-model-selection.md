@@ -1,6 +1,6 @@
 # Optional: Select a model
 
-> **Time:** 10 minutes  
+> **Pace:** Self-paced
 > **Prerequisite:** Complete the seven core steps first.
 
 ## What you'll customize
@@ -83,6 +83,7 @@ Model selection configures `SessionConfig`. It does not replace the client or ei
 
 Create `Helpers/ModelSelector.cs`:
 
+<!-- code-id: 08-model-selection-dotnet-1 -->
 ```csharp
 using GitHub.Copilot;
 
@@ -120,20 +121,18 @@ public static class ModelSelector
 :::language dotnet
 After `PingAsync` in `Program.cs`, insert:
 
+<!-- code-id: 08-model-selection-dotnet-2 -->
 ```csharp
 var selectedModel = await ModelSelector.SelectAsync(client);
 ```
 :::
 :::language dotnet
-Then add `Model = selectedModel` to `SessionConfig`:
+Insert this property into the existing `var config = new SessionConfig` initializer.
+Do not replace that initializer or its other capability and working-directory settings:
 
+<!-- code-id: 08-model-selection-dotnet-3 -->
 ```csharp
-await using var session = await client.CreateSessionAsync(new SessionConfig
-{
-    Model = selectedModel,
-    Streaming = true,
-    // Keep the existing permission, local-tool, and MCP configuration.
-});
+Model = selectedModel,
 ```
 :::
 Do not remove the rest of the Step 6 session configuration.
@@ -143,6 +142,7 @@ Do not remove the rest of the Step 6 session configuration.
 
 Create `src/model-selector.ts`:
 
+<!-- code-id: 08-model-selection-nodejs-1 -->
 ```typescript
 import type { CopilotClient } from "@github/copilot-sdk";
 import { createInterface } from "node:readline/promises";
@@ -179,6 +179,7 @@ export async function selectModel(client: CopilotClient): Promise<string | undef
 
 In `src/report.ts`, import the helper and call it after `client.start()`:
 
+<!-- code-id: 08-model-selection-nodejs-2 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { selectModel } from "./model-selector.js";
@@ -198,10 +199,11 @@ if (!["http:", "https:"].includes(target.protocol)) {
 }
 
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const selectedModel = await selectModel(client);
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     model: selectedModel,
     streaming: true,
     onPermissionRequest: permissionForTarget(target),
@@ -238,6 +240,7 @@ Keep every existing tool, MCP, and permission setting from Step 6. Only add `mod
 
 Create `model_selector.py`:
 
+<!-- code-id: 08-model-selection-python-1 -->
 ```python
 from __future__ import annotations
 
@@ -270,8 +273,10 @@ async def select_model(client: CopilotClient) -> str | None:
 In `report.py`, import the helper and pass `model=` into `create_session` without
 removing the Step 6 tool configuration:
 
+<!-- code-id: 08-model-selection-python-2 -->
 ```python
 import asyncio
+from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
@@ -302,7 +307,7 @@ async def main() -> None:
 
     async with CopilotClient() as client:
         selected_model = await select_model(client)
-        async with await client.create_session(
+        async with await client.create_session(working_directory=str(Path.cwd()),
             model=selected_model,
             streaming=True,
             on_permission_request=permission_for_target(target),
@@ -331,8 +336,10 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name):
                         print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success):
@@ -343,9 +350,13 @@ async def main() -> None:
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send(report_prompt(target))
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(report_prompt(target))
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -362,6 +373,7 @@ Keep launching through `python main.py` so the existing entrypoint still imports
 
 Add this helper near the top of `main.go` (or in a sibling file in the same package):
 
+<!-- code-id: 08-model-selection-go-1 -->
 ```go
 func selectModel(ctx context.Context, client *copilot.Client) (string, error) {
 	models, err := client.ListModels(ctx)
@@ -398,16 +410,19 @@ func selectModel(ctx context.Context, client *copilot.Client) (string, error) {
 Add `"strconv"` to the import block if it is not already present. After `client.Start`, select a
 model and set `SessionConfig.Model`:
 
+Replace the existing client-start and session-creation section with this block, stopping at the closing `client.CreateSession` call. Keep the session cleanup defer and final report send below it; do not introduce a second client.
+
+<!-- code-id: 08-model-selection-go-2 -->
 ```go
 client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+defer func() { err = errors.Join(err, client.Stop()) }()
 if err := client.Start(context.Background()); err != nil {
-	panic(err)
+	return err
 }
-defer client.Stop()
 
 selectedModel, err := selectModel(context.Background(), client)
 if err != nil {
-	panic(err)
+	return err
 }
 
 session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
@@ -435,6 +450,7 @@ Keep every existing tool, MCP, and permission setting from Step 6. Only add `Mod
 
 Add this helper in `src/main.rs`:
 
+<!-- code-id: 08-model-selection-rust-1 -->
 ```rust
 async fn select_model(client: &Client) -> Result<Option<String>, Box<dyn std::error::Error>> {
     // list_models caches the catalog; it calls models().list() on first use.
@@ -465,44 +481,75 @@ async fn select_model(client: &Client) -> Result<Option<String>, Box<dyn std::er
 }
 ```
 
-After `Client::start`, select a model and set `config.model` before `create_session`:
+The replacement below selects a model inside the client-protected block and preserves the existing tool policy:
 
+Replace from `let mut config = SessionConfig::default();` through the end of `main`'s body with this section. Keep the lookup, reader, target, and working-directory declarations above it and the final function brace. Do not append the previous send, cleanup, or `Ok(())` again.
+
+<!-- code-id: 08-model-selection-rust-2 -->
 ```rust
 let client = Client::start(ClientOptions::default()).await?;
-let selected_model = select_model(&client).await?;
+let result = async {
+    let selected_model = select_model(&client).await?;
 
-let mut config = SessionConfig::default();
-config.model = selected_model;
-config.streaming = Some(true);
-config.tools = Some(vec![lookup, reader]);
-config.available_tools = Some(vec![
-    "accessibility_rule_lookup".to_owned(),
-    "read_latest_accessibility_snapshot".to_owned(),
-    "playwright-browser_navigate".to_owned(),
-]);
-config.mcp_servers = Some(IndexMap::from([(
-    "playwright".to_owned(),
-    McpServerConfig::Stdio(McpStdioServerConfig {
-        command: "npx".to_owned(),
-        args: vec![
-            "-y".to_owned(),
-            "@playwright/mcp@0.0.78".to_owned(),
-            "--browser=msedge".to_owned(),
-            "--output-dir".to_owned(),
-            ".playwright-mcp".to_owned(),
-            "--output-mode".to_owned(),
-            "file".to_owned(),
-        ],
-        tools: Some(vec!["browser_navigate".to_owned()]),
-        working_directory: Some(working_directory.display().to_string()),
-        ..Default::default()
-    }),
-)]));
-let config = config.with_permission_handler(Arc::new(ScopedPermissions {
-    target: target.clone(),
-}));
-
-let session = client.create_session(config).await?;
+    let mut config = SessionConfig::default();
+    config.model = selected_model;
+    config.streaming = Some(true);
+    config.tools = Some(vec![lookup, reader]);
+    config.available_tools = Some(vec![
+        "accessibility_rule_lookup".to_owned(),
+        "read_latest_accessibility_snapshot".to_owned(),
+        "playwright-browser_navigate".to_owned(),
+    ]);
+    config.mcp_servers = Some(IndexMap::from([(
+        "playwright".to_owned(),
+        McpServerConfig::Stdio(McpStdioServerConfig {
+            command: "npx".to_owned(),
+            args: vec![
+                "-y".to_owned(),
+                "@playwright/mcp@0.0.78".to_owned(),
+                "--browser=msedge".to_owned(),
+                "--output-dir".to_owned(),
+                ".playwright-mcp".to_owned(),
+                "--output-mode".to_owned(),
+                "file".to_owned(),
+            ],
+            tools: Some(vec!["browser_navigate".to_owned()]),
+            working_directory: Some(working_directory.display().to_string()),
+            ..Default::default()
+        }),
+    )]));
+    let config = config.with_permission_handler(Arc::new(ScopedPermissions {
+        target: target.clone(),
+    }));
+    let session = client.create_session(config).await?;
+    let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        stream_response!(session, report_prompt(&target));
+        Ok::<(), Box<dyn std::error::Error>>(())
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+    })
+    .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+    .and_then(|result| result);
+    let cleanup = session.disconnect().await;
+    if let Err(error) = cleanup {
+        if response_result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Session cleanup also failed: {error}");
+    }
+    response_result
+}
+.await;
+let cleanup = client.stop().await;
+if let Err(error) = cleanup {
+    if result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Client cleanup also failed: {error}");
+}
+result
 ```
 
 Keep every existing tool, MCP, and permission setting from Step 6. Only add `config.model`.
@@ -513,6 +560,7 @@ Keep every existing tool, MCP, and permission setting from Step 6. Only add `con
 
 Create `src/main/java/workshop/ModelSelector.java`:
 
+<!-- code-id: 08-model-selection-java-1 -->
 ```java
 package workshop;
 
@@ -563,9 +611,11 @@ public final class ModelSelector {
 }
 ```
 
-In `src/main/java/workshop/AccessibilityReport.java`, after `client.start().get()`,
-select a model and call `SessionConfig.setModel(selectedId)`:
+In `src/main/java/workshop/AccessibilityReport.java`, replace the existing configuration
+and client block with the following block. Keep `target`, `workingDirectory`, `lookup`, and
+`readSnapshot` above it. Do not leave the old `config` declaration outside the new block:
 
+<!-- code-id: 08-model-selection-java-2 -->
 ```java
 try (var client = new CopilotClient()) {
     client.start().get();
@@ -584,37 +634,16 @@ try (var client = new CopilotClient()) {
                     .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                     .setWorkingDirectory(workingDirectory.toString())
                     .setTools(List.of("browser_navigate"))))
-            .setOnPermissionRequest((request, ignored) -> {
-                if ("mcp".equals(request.getKind())
-                        && isExactNavigation(request.getExtensionData(), target)) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.approveOnce());
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.reject(
-                                "This workshop allows Playwright to navigate only to the exact requested target. "
-                                        + "MCP requests without target data remain denied unless the explicit "
-                                        + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-            });
+            .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
-    var session = client.createSession(config).get();
-    var response = session.sendAndWait(new MessageOptions().setPrompt(reportPrompt(target))).get();
-    if (response == null) {
-        throw new IllegalStateException("Copilot completed without an assistant message.");
+    try (var session = client.createSession(config).get()) {
+        ResponseStreamer.sendAndPrint(session, reportPrompt(target));
     }
-    System.out.println(response.getData().content());
 }
 ```
 
-Keep every existing tool, MCP, and permission setting from Step 6. Only add
-`SessionConfig.setModel(selectedModel)`. In particular, preserve the default exact-target rejection
-and the explicitly opted-in `--allow-local-demo-mcp` workaround for
-[github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273); that fallback
-approves only the `mcp` kind and cannot prove the target URL.
+Model selection adds `SessionConfig.setModel(selectedModel)`. The existing MCP configuration,
+exact three-tool allowlist, and strict navigation handler remain unchanged.
 :::
 
 ## Run it
@@ -646,7 +675,7 @@ cargo run -- "{{TARGET_APP_URL}}"
 :::
 :::language java
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 :::
 Enter the workshop target URL, then choose a model, and confirm the same scoped tools still run.

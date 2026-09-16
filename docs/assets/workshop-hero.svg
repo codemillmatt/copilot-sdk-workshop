@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 590" role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">Build the worker. Choose the tools. Inspect the result.</title>
+  <desc id="hero-desc">An original illustration of an application configured through the Copilot SDK, a glowing Copilot CLI harness that runs the model and tool loop, and two sample output cards: a museum exhibit draft and an accessibility review report. The cards illustrate possible outcomes, not verified results.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#101d2b"/>
+      <stop offset="1" stop-color="#10101e"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop stop-color="#6544b6" stop-opacity=".62"/>
+      <stop offset="1" stop-color="#6544b6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#00dfda"/>
+      <stop offset="1" stop-color="#bd94ff"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#21354a"/>
+      <stop offset="1" stop-color="#131c2a"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="170%" height="180%">
+      <feDropShadow dx="0" dy="16" stdDeviation="17" flood-color="#000" flood-opacity=".38"/>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#a6c6d8" stroke-opacity=".065"/>
+    </pattern>
+    <style>
+      text { font-family: system-ui, sans-serif; }
+      .eyebrow { font-size: 12px; font-weight: 650; letter-spacing: 2px; }
+      .mono { font-family: ui-monospace, monospace; font-size: 15px; }
+    </style>
+  </defs>
+
+  <rect width="680" height="590" rx="28" fill="url(#background)"/>
+  <rect width="680" height="590" rx="28" fill="url(#grid)"/>
+  <ellipse cx="545" cy="195" rx="325" ry="300" fill="url(#halo)"/>
+  <ellipse cx="130" cy="510" rx="190" ry="90" fill="#00dfda" opacity=".06" filter="url(#glow)"/>
+
+  <text x="40" y="51" class="eyebrow" fill="#bac9d9">FROM YOUR CODE TO A USEFUL RESULT</text>
+  <rect x="40" y="75" width="83" height="31" rx="15" fill="#253e47" stroke="#61cbc8" stroke-opacity=".45"/>
+  <text x="81" y="96" text-anchor="middle" fill="#bcf5ed" font-size="13">a task</text>
+  <rect x="135" y="75" width="115" height="31" rx="15" fill="#253347" stroke="#ad9cdb" stroke-opacity=".45"/>
+  <text x="192" y="96" text-anchor="middle" fill="#e0d6fa" font-size="13">instructions</text>
+  <rect x="262" y="75" width="83" height="31" rx="15" fill="#253347" stroke="#ad9cdb" stroke-opacity=".45"/>
+  <text x="303" y="96" text-anchor="middle" fill="#e0d6fa" font-size="13">tools</text>
+
+  <path d="M485 410C591 395 608 289 595 180" fill="none" stroke="url(#edge)" stroke-width="2.5" stroke-opacity=".7"/>
+  <path d="M450 405C490 377 535 353 536 299" fill="none" stroke="url(#edge)" stroke-width="2.5" stroke-opacity=".7"/>
+  <circle cx="599" cy="198" r="5" fill="#9af5ec"/>
+  <circle cx="535" cy="334" r="5" fill="#d4baff"/>
+
+  <g transform="rotate(5 519 175)" filter="url(#shadow)">
+    <rect x="393" y="127" width="239" height="135" rx="14" fill="#f4eddf"/>
+    <text x="414" y="157" class="eyebrow" fill="#526557">EXHIBIT DRAFT</text>
+    <text x="414" y="187" fill="#233a36" font-size="23" style="font-family: Georgia, serif">A journey</text>
+    <text x="414" y="215" fill="#233a36" font-size="23" style="font-family: Georgia, serif">to the Moon</text>
+    <path d="M415 235H601M415 249H566" stroke="#a7b4a7" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <g transform="rotate(-3 525 317)" filter="url(#shadow)">
+    <rect x="411" y="272" width="231" height="123" rx="14" fill="#e0f0ed"/>
+    <text x="430" y="300" class="eyebrow" fill="#2b615c">REVIEW REPORT</text>
+    <circle cx="435" cy="324" r="4" fill="#318e85"/>
+    <text x="449" y="329" fill="#284b47" font-size="14">Observed evidence</text>
+    <circle cx="435" cy="349" r="4" fill="#318e85"/>
+    <text x="449" y="354" fill="#284b47" font-size="14">Suggested fixes</text>
+    <circle cx="435" cy="374" r="4" fill="#318e85"/>
+    <text x="449" y="379" fill="#284b47" font-size="14">Review limits</text>
+  </g>
+
+  <g transform="rotate(-5 215 312)" filter="url(#shadow)">
+    <rect x="33" y="173" width="354" height="277" rx="17" fill="url(#glass)" stroke="#7898b8" stroke-opacity=".55"/>
+    <path d="M34 220H386" stroke="#526780" stroke-opacity=".65"/>
+    <circle cx="56" cy="197" r="5" fill="#ef998e"/>
+    <circle cx="75" cy="197" r="5" fill="#e5c87e"/>
+    <circle cx="94" cy="197" r="5" fill="#6ad6b4"/>
+    <text x="119" y="202" class="eyebrow" fill="#d5e3ee">YOUR APPLICATION</text>
+    <text x="59" y="271" fill="#f1f7fa" font-size="29" font-weight="700">Configure the worker.</text>
+    <text x="59" y="311" class="mono" fill="#67e0d7">role</text>
+    <text x="143" y="311" class="mono" fill="#d7e4f0">museum curator</text>
+    <text x="59" y="343" class="mono" fill="#67e0d7">input</text>
+    <text x="143" y="343" class="mono" fill="#d7e4f0">approved facts</text>
+    <text x="59" y="375" class="mono" fill="#67e0d7">request</text>
+    <text x="143" y="375" class="mono" fill="#d7e4f0">draft an exhibit</text>
+    <text x="59" y="421" class="eyebrow" fill="#a6b9d0">GITHUB COPILOT SDK</text>
+  </g>
+
+  <circle cx="465" cy="468" r="84" fill="#7955d6" opacity=".28" filter="url(#glow)"/>
+  <circle cx="465" cy="468" r="80" fill="#152538" stroke="url(#edge)" stroke-width="2.5"/>
+  <circle cx="465" cy="468" r="94" fill="none" stroke="#78d8dc" stroke-opacity=".25" stroke-dasharray="2 9"/>
+  <path d="M318 451C351 450 359 468 382 468" fill="none" stroke="#72e6dc" stroke-width="3"/>
+  <circle cx="363" cy="464" r="5" fill="#aefff4"/>
+  <text x="465" y="447" text-anchor="middle" class="eyebrow" fill="#84e3dc">HARNESS</text>
+  <text x="465" y="479" text-anchor="middle" fill="#f4f7fb" font-size="23" font-weight="700">Copilot CLI</text>
+  <text x="465" y="506" text-anchor="middle" fill="#bdcbe0" font-size="13">runs the loop</text>
+  <text x="40" y="548" fill="#a5b9cc" font-size="13">Two example projects.</text>
+  <text x="40" y="568" fill="#a5b9cc" font-size="13">You control the application.</text>
+</svg>

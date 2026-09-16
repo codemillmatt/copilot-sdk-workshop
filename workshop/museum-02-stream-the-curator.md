@@ -1,38 +1,38 @@
 # Step 2: Stream the curator
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
-The same prompt, but the answer appears word by word instead of arriving after a silent pause.
+Keep the Apollo 11 prompt, but show text as it arrives.
+**Streaming** lets the educator start reading before the whole response finishes.
+Continue where you left off from Step 1. You'll keep tools disabled.
 
-You will not write an event loop. The starter already ships a streaming printer in the pre-built
-curator helpers: it subscribes to
-[session events](https://github.com/github/copilot-sdk/blob/main/docs/features/streaming-events.md),
-writes each delta to standard output, reports tool activity, fails on session errors, enforces a
-timeout, unsubscribes on every path, and returns the full text it accumulated. Your job is to turn
-streaming on and call it.
+The Copilot CLI runtime emits **events** for new text, tool activity, errors, and completion through the SDK.
+A text **delta** is a new chunk, not necessarily a whole word.
+Enabling streaming requests those updates. A callback must still consume them.
 
-## Why streaming matters for a curator
-
-Exhibit copy is prose a human has to read and judge. Watching it arrive tells you immediately
-whether the tone is right, whether the model is padding, and whether it is drifting off the subject
-— long before the run finishes. Streaming also gives you a place to notice tool calls, which
-matters from Step 4 onward, when the curator has to call the application's fact tool before it can
-write anything.
-
-The helper returns the whole response as a string, so from here on you always have the finished
-text to inspect after the stream ends.
+The starter supplies that callback. It prints updates, retains the response, handles errors and a deadline, and releases its subscription.
+Later, the validator will use the retained text.
 
 ## Swap the blocking call for the streamer
+
+Enable streaming and replace the completed-response call together.
+Changing the setting alone does not print events.
+Keep the prompt and permission settings unchanged so you can compare the two response paths.
 
 :::language dotnet
 Replace the entire contents of `Program.cs`:
 
+<!-- code-id: museum-02-stream-the-curator-dotnet-1 -->
 ```csharp
+using System;
+using System.Threading.Tasks;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 using MuseumExhibitStudio.Helpers;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== Museum Exhibit Studio ===");
 Console.WriteLine();
@@ -43,7 +43,9 @@ await client.StartAsync();
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
     ClientName = "museum-exhibit-studio",
-    OnPermissionRequest = PermissionHandler.ApproveAll,
+    AvailableTools = [],
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("This session does not allow unexpected permission requests.")),
     Streaming = true
 });
 
@@ -51,27 +53,25 @@ await CuratorStreamer.StreamExhibitAsync(
     session,
     "Write two sentences of museum wall text about the Apollo 11 Moon landing.");
 
-await client.StopAsync();
+#pragma warning restore GHCP001
 ```
 
-Two changes: `Streaming = true` on the session config, and `CuratorStreamer.StreamExhibitAsync`
-in place of `SendAndWaitAsync`. The Step 1 permission handler stays exactly where it was. The
-helper lives in `Helpers/CuratorStreamer.cs` and you never edit it.
+The session setting `Streaming = true` enables streaming.
+`CuratorStreamer.StreamExhibitAsync` replaces the completed-response call to `SendAndWaitAsync`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `Helpers/CuratorStreamer.cs` and read `StreamExhibitAsync` once. It is the
-SDK event loop, and this is the clearest place in the workshop to see how streaming actually works.
-It subscribes with `session.On<SessionEvent>`, appends and writes each `AssistantMessageDeltaEvent`
-chunk the moment it arrives, prints a `[tool:start]` line for every `ToolExecutionStartEvent` and a
-`[tool:done]` line for every `ToolExecutionCompleteEvent`, completes on `SessionIdleEvent`, and
-faults on `SessionErrorEvent`. A `Task.Delay` race turns the timeout into a `TimeoutException`, and
-the subscription is disposed on every path.
+Open `Helpers/CuratorStreamer.cs`.
+Find `CuratorStreamer.StreamExhibitAsync`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 :::language nodejs
 Replace the entire contents of `src/index.ts`:
 
+<!-- code-id: museum-02-stream-the-curator-nodejs-1 -->
 ```typescript
-import { approveAll, CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient } from "@github/copilot-sdk";
 import { streamExhibit } from "./curator.js";
 
 async function main(): Promise<void> {
@@ -79,45 +79,48 @@ async function main(): Promise<void> {
   console.log();
 
   const client = new CopilotClient();
-  await client.start();
-  const session = await client.createSession({
-    clientName: "museum-exhibit-studio",
-    onPermissionRequest: approveAll,
-    streaming: true,
-  });
-
-  await streamExhibit(
-    session,
-    "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
-  );
-
-  await session.disconnect();
-  await client.stop();
+  try {
+    await client.start();
+    const session = await client.createSession({ availableTools: [],
+      clientName: "museum-exhibit-studio",
+      onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
+      streaming: true,
+    });
+    try {
+      await streamExhibit(
+        session,
+        "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+      );
+    } finally {
+      await session.disconnect();
+    }
+  } finally {
+    await client.stop();
+  }
 }
 
 void main();
 ```
 
-Two changes: `streaming: true` on the session config, and `streamExhibit` in place of
-`sendAndWait`. The Step 1 permission handler stays exactly where it was. The helper lives in
-`src/curator.ts` and you never edit it.
+The session setting `streaming: true` enables streaming.
+`streamExhibit` replaces the completed-response call to `sendAndWait`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `src/curator.ts` and read `streamExhibit` once. It is the SDK event loop, and
-this is the clearest place in the workshop to see how streaming actually works. It subscribes with
-`session.on`, writes each `assistant.message_delta` chunk to standard output the moment it arrives,
-prints a `[tool:start]` line for every `tool.execution_start` event and a `[tool:done]` line for
-every `tool.execution_complete` event, resolves its promise on `session.idle`, and rejects on
-`session.error`. A `setTimeout` rejects if neither ever arrives, and `finish` unsubscribes on every
-path.
+Open `src/curator.ts`.
+Find `streamExhibit`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 :::language python
 Replace the entire contents of `main.py`:
 
+<!-- code-id: museum-02-stream-the-curator-python-1 -->
 ```python
 import asyncio
 
-from copilot import CopilotClient, PermissionHandler
+from copilot import CopilotClient
+from copilot.rpc import PermissionDecisionReject
 
 from curator import stream_exhibit
 
@@ -127,9 +130,9 @@ async def main() -> None:
     print()
 
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(available_tools=[],
             client_name="museum-exhibit-studio",
-            on_permission_request=PermissionHandler.approve_all,
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(feedback="This session does not allow that permission request."),
             streaming=True,
         ) as session:
             await stream_exhibit(
@@ -142,79 +145,89 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-The whole event listener from Step 1 collapses into one call. `stream_exhibit` lives in
-`curator.py`, already does the matching on `AssistantMessageDeltaData`, `SessionErrorData`, and
-`SessionIdleData`, and you never edit it.
+The session setting `streaming=True` enables streaming.
+`stream_exhibit` replaces the completed-response call to `send_and_wait`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `curator.py` and read `stream_exhibit` once. It is the SDK event loop, and
-this is the clearest place in the workshop to see how streaming actually works. It subscribes with
-`session.on`, prints each `AssistantMessageDeltaData` chunk the moment it arrives, prints a
-`[tool:start]` line for every `ToolExecutionStartData` and a `[tool:done]` line for every
-`ToolExecutionCompleteData`, sets its `done` event on `SessionIdleData`, and re-raises
-`SessionErrorData` as a `RuntimeError`. `asyncio.wait_for` applies the timeout, and a `finally`
-block unsubscribes on every path.
+Open `curator.py`.
+Find `stream_exhibit`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 :::language go
 Replace the entire contents of `main.go`:
 
+<!-- code-id: museum-02-stream-the-curator-go-1 -->
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/github/copilot-sdk/go/rpc"
+	"os"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	fmt.Println("=== Museum Exhibit Studio ===")
 	fmt.Println()
 
 	ctx := context.Background()
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(ctx); err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = client.Stop() }()
 
 	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		ClientName:          "museum-exhibit-studio",
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
-		Streaming:           copilot.Bool(true),
+		AvailableTools: []string{},
+		ClientName:     "museum-exhibit-studio",
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
+		Streaming: copilot.Bool(true),
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = session.Disconnect() }()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	if _, err := StreamExhibit(
 		session,
 		"Write two sentences of museum wall text about the Apollo 11 Moon landing.",
 		GenerationTimeout,
 	); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 
-Two changes: `Streaming: copilot.Bool(true)` on the session config, and `StreamExhibit` in place of
-`SendAndWait`. The Step 1 permission handler stays exactly where it was. `StreamExhibit` and
-`GenerationTimeout` come from `curator.go` in the same package, and you never edit that file.
+The session setting `Streaming: copilot.Bool(true)` enables streaming.
+`StreamExhibit` replaces the completed-response call to `SendAndWait`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `curator.go` and read `StreamExhibit` once. It is the SDK event loop, and
-this is the clearest place in the workshop to see how streaming actually works. It subscribes with
-`session.On`, prints each `AssistantMessageDeltaData` chunk the moment it arrives, prints a
-`[tool:start]` line for every `ToolExecutionStartData` and a `[tool:done]` line for every
-`ToolExecutionCompleteData`, and records any `SessionErrorData` to return as an error. It then
-waits on `session.SendAndWait` inside a `context.WithTimeout` built from the timeout you pass, and
-a deferred `unsubscribe` runs on every path.
+Open `curator.go`.
+Find `StreamExhibit`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 :::language rust
 Replace the entire contents of `src/main.rs`:
 
+<!-- code-id: museum-02-stream-the-curator-rust-1 -->
 ```rust
 use github_copilot_sdk::permission;
 use github_copilot_sdk::types::SessionConfig;
@@ -226,48 +239,67 @@ async fn main() -> Result<(), RuntimeError> {
     println!("=== Museum Exhibit Studio ===");
     println!();
 
-    let client = Client::start(ClientOptions::default()).await?;
-    let mut config = SessionConfig::default().with_permission_handler(permission::approve_all());
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
     config.client_name = Some("museum-exhibit-studio".to_owned());
+    config.available_tools = Some(vec![]);
     config.streaming = Some(true);
-    let session = client.create_session(config).await?;
 
-    stream_exhibit(
-        &session,
-        "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
-        GENERATION_TIMEOUT,
-    )
-    .await?;
-
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let client = Client::start(ClientOptions::default()).await?;
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = async {
+            stream_exhibit(
+                &session,
+                "Write two sentences of museum wall text about the Apollo 11 Moon landing.",
+                GENERATION_TIMEOUT,
+            )
+            .await?;
+            Ok::<(), RuntimeError>(())
+        }
+        .await;
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as RuntimeError);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as RuntimeError);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 
-Two changes: `config.streaming = Some(true)`, and `stream_exhibit` in place of `send_and_wait`. The
-Step 1 permission handler stays exactly where it was. Both `stream_exhibit` and
-`GENERATION_TIMEOUT` come from the `museum_exhibit_studio` crate in `src/lib.rs`, and you never
-edit it.
+The session setting `config.streaming = Some(true)` enables streaming.
+`stream_exhibit` replaces the completed-response call to `send_and_wait`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `src/lib.rs` and read `stream_exhibit` once. It is the SDK event loop, and
-this is the clearest place in the workshop to see how streaming actually works. It subscribes with
-`session.subscribe`, prints and flushes each `assistant.message_delta` chunk the moment it arrives,
-prints a `[tool:start]` line for every `tool.execution_start` event and a `[tool:done]` line for
-every `tool.execution_complete` event, finishes on `session.idle`, and returns an error on
-`session.error`. It polls the send future, the event stream, and a deadline together, so the
-timeout you pass holds even if no event ever arrives.
+Open `src/lib.rs`.
+Find `stream_exhibit`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 :::language java
 Replace the entire contents of `src/main/java/workshop/MuseumExhibitStudio.java`:
 
+<!-- code-id: museum-02-stream-the-curator-java-1 -->
 ```java
 package workshop;
 
 import com.github.copilot.CopilotClient;
-import com.github.copilot.rpc.PermissionHandler;
 import com.github.copilot.rpc.SessionConfig;
+import com.github.copilot.rpc.PermissionRequestResult;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class MuseumExhibitStudio {
     private MuseumExhibitStudio() {
@@ -276,36 +308,31 @@ public final class MuseumExhibitStudio {
     public static void main(String[] args) throws Exception {
         System.out.println("=== Museum Exhibit Studio ===");
         System.out.println();
-
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(new SessionConfig()
+            var config = new SessionConfig()
                     .setClientName("museum-exhibit-studio")
-                    .setOnPermissionRequest(PermissionHandler.APPROVE_ALL)
-                    .setStreaming(true)).get();
-            try {
+                    .setAvailableTools(List.of())
+                    .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")))
+                    .setStreaming(true);
+            try (var session = client.createSession(config).get()) {
                 CuratorStreamer.streamExhibit(session,
                         "Write two sentences of museum wall text about the Apollo 11 Moon landing.");
-            } finally {
-                session.close();
-                client.stop().get();
             }
         }
     }
 }
 ```
 
-Two changes: `setStreaming(true)` on the session config, and `CuratorStreamer.streamExhibit` in
-place of `sendAndWait`. The Step 1 permission handler stays exactly where it was. The helper lives
-in `CuratorStreamer.java` beside your file, and you never edit it.
+The session setting `setStreaming(true)` enables streaming.
+`CuratorStreamer.streamExhibit` replaces the completed-response call to `sendAndWait`.
+Keep the empty tool list and permission handler from Step 1.
 
-**Look inside:** open `CuratorStreamer.java` and read `streamExhibit` once. It is the SDK event
-loop, and this is the clearest place in the workshop to see how streaming actually works. It
-registers one listener per event type: `AssistantMessageDeltaEvent` prints and accumulates each
-chunk as it arrives, `ToolExecutionStartEvent` and `ToolExecutionCompleteEvent` print the
-`[tool:start]` and `[tool:done]` lines, `SessionIdleEvent` ends the line, and `SessionErrorEvent`
-is captured and rethrown. The timeout you pass goes to `session.sendAndWait` in milliseconds, and
-every subscription is closed in a `finally` block.
+Open `src/main/java/workshop/CuratorStreamer.java`.
+Find `CuratorStreamer.streamExhibit`, the supplied function you just called.
+It receives a session, a prompt, and a deadline.
+It prints events and returns collected text.
 :::
 
 ## Run it
@@ -321,9 +348,18 @@ npm start
 ```
 :::
 :::language python
-```bash
-.venv/bin/python main.py
-```
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Run the Python museum application">
+    <button type="button" role="tab" aria-selected="true" data-tab="run-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="run-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="run-python-windows">
+    <pre><code class="language-powershell">.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="run-python-unix" hidden>
+    <pre><code class="language-bash">.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 :::
 :::language go
 ```bash
@@ -341,33 +377,37 @@ mvn compile exec:java
 ```
 :::
 
-The same kind of answer appears, but this time you watch it being written:
+Look for text arriving before the request finishes.
+The output can resemble this partial response:
 
+<!-- code-id: museum-02-stream-the-curator-shared-1 -->
 ```text
 === Museum Exhibit Studio ===
 
 In July 1969, three astronauts left Earth aboard Apollo 11... 
 ```
 
-The text grows in place instead of appearing all at once, and the program exits shortly after the
-last word. If you see nothing until the very end, the session is not streaming — check that you set
-the streaming flag on the session config.
+A short response may arrive too quickly to reveal separate chunks.
+If all text appears at the end, check both the streaming setting and the helper call.
+Output buffering or a fallback message can produce the same observation.
+Use events as evidence rather than expecting fixed chunk sizes.
+
+Once the request finishes, the process should exit.
+Next we'll give the curator instructions about its audience and writing style.
 
 ## Check your understanding
 
-- Streaming is switched on in two places conceptually: the session config and the code that reads
-  events. Which one did you write, and which one did the helper already own?
-- The helper returns the full response text even though it also printed it. Why will that return
-  value matter in Step 6?
-- If the model never becomes idle, what stops your program from waiting forever?
+Why do we need both the streaming setting and the supplied helper?
+
+<details>
+<summary>Check your answer</summary>
+
+The setting requests events. The helper consumes them, prints text, retains the result, and handles completion or failure.
+
+</details>
 
 ## Learn more
 
-- [Steering and queueing](https://github.com/github/copilot-sdk/blob/main/docs/features/steering-and-queueing.md):
-  sending another message while a turn is still streaming, instead of waiting for it to finish.
-- [Usage and billing metrics](https://github.com/github/copilot-sdk/blob/main/docs/features/usage-and-billing.md):
-  reading token counts and cost from the same events the printer is already subscribed to.
-- [Context clearing](https://github.com/github/copilot-sdk/blob/main/docs/features/context-management.md):
-  replacing a conversation inside a session that you want to keep using.
+Optional reference: [Steering and queueing](https://github.com/github/copilot-sdk/blob/main/docs/features/steering-and-queueing.md).
 
 Continue to [Give the curator a voice](museum-03-curator-voice.md).

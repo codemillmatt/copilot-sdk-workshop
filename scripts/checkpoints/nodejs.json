@@ -1,0 +1,93 @@
+{
+  "accessibility": [
+    {"lesson":"01-first-session.md","operations":[{"op":"write","file":"src/index.ts","block":"01-first-session-nodejs-1"}]},
+    {"lesson":"02-streaming.md","operations":[{"op":"write","file":"src/index.ts","block":"02-streaming-nodejs-2"}]},
+    {"lesson":"03-local-tool.md","operations":[
+      {"op":"replace-import","file":"src/index.ts","name":"./workshop.js","block":"03-local-tool-nodejs-3"},
+      {"op":"replace-region","file":"src/index.ts","anchor":"  const session = await client.createSession(","end":"    await session.disconnect();\n  }","block":"03-local-tool-nodejs-4"}
+    ]},
+    {"lesson":"04-mcp-safety.md","operations":[
+      {"op":"write","file":"src/index.ts","block":"04-mcp-safety-nodejs-1"},
+      {"op":"append","file":"src/index.ts","block":"04-mcp-safety-nodejs-4"}
+    ]},
+    {"lesson":"05-combine-tools.md","operations":[
+      {"op":"write","file":"src/index.ts","block":"05-combine-tools-nodejs-1"},
+      {"op":"append","file":"src/index.ts","block":"05-combine-tools-nodejs-2"}
+    ]},
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"replace-function","file":"src/workshop.ts","name":"reportPrompt","block":"06-structured-report-nodejs-1"},
+      {"op":"write","file":"src/report.ts","block":"06-structured-report-nodejs-2"},
+      {"op":"write","file":"src/index.ts","block":"06-structured-report-nodejs-3"}
+    ]},
+    {"lesson":"07-run-explain.md","operations":[]},
+    {"lesson":"08-model-selection.md","operations":[
+      {"op":"write","file":"src/model-selector.ts","block":"08-model-selection-nodejs-1"},
+      {"op":"write","file":"src/report.ts","block":"08-model-selection-nodejs-2"}
+    ]},
+    {"lesson":"09-interactive-html-report.md","operations":[
+      {"op":"replace-function","file":"src/workshop.ts","name":"permissionForTarget","block":"09-interactive-html-report-nodejs-1"},
+      {"op":"replace-function","file":"src/workshop.ts","name":"reportPrompt","block":"09-interactive-html-report-nodejs-3"},
+      {"op":"replace-config","file":"src/report.ts","block":"09-interactive-html-report-nodejs-2"},
+      {"op":"prepend","file":"src/report.ts","block":"09-html-nodejs-artifact-import"},
+      {"op":"replace-braced","file":"src/report.ts","anchor":"  try {","block":"09-html-nodejs-artifact-check"}
+    ]}
+  ],
+  "accessibility-html-direct": [
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"write","file":"src/report.ts","block":"06-structured-report-nodejs-2"},
+      {"op":"write","file":"src/index.ts","block":"06-structured-report-nodejs-3"}
+    ]},
+    {"lesson":"09-interactive-html-report.md","operations":[
+      {"op":"replace-function","file":"src/workshop.ts","name":"permissionForTarget","block":"09-interactive-html-report-nodejs-1"},
+      {"op":"replace-function","file":"src/workshop.ts","name":"reportPrompt","block":"09-interactive-html-report-nodejs-3"},
+      {"op":"replace-config","file":"src/report.ts","block":"09-interactive-html-report-nodejs-2"},
+      {"op":"prepend","file":"src/report.ts","block":"09-html-nodejs-artifact-import"},
+      {"op":"replace-braced","file":"src/report.ts","anchor":"  try {","block":"09-html-nodejs-artifact-check"}
+    ]}
+  ],
+  "accessibility-references": [
+    {"lesson":"01-first-session.md","operations":[{"op":"write","file":"src/index.ts","block":"01-first-session-nodejs-3"}]},
+    {"lesson":"02-streaming.md","operations":[{"op":"write","file":"src/index.ts","block":"02-streaming-nodejs-5"}]},
+    {"lesson":"03-local-tool.md","operations":[{"op":"write","file":"src/index.ts","block":"03-local-tool-nodejs-6"}]},
+    {"lesson":"04-mcp-safety.md","operations":[{"op":"write","file":"src/index.ts","block":"04-mcp-safety-nodejs-6"}]},
+    {"lesson":"05-combine-tools.md","operations":[{"op":"write","file":"src/index.ts","block":"05-combine-tools-nodejs-3"}]},
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"write","file":"src/index.ts","block":"06-structured-report-nodejs-4"},
+      {"op":"write","file":"src/report.ts","block":"06-structured-report-nodejs-5"},
+      {"op":"replace-function","file":"src/workshop.ts","name":"reportPrompt","block":"06-structured-report-nodejs-6"}
+    ]}
+  ],
+  "museum": [
+    {"lesson":"museum-01-first-curator-session.md","operations":[{"op":"write","file":"src/index.ts","block":"museum-01-first-curator-session-nodejs-1"}]},
+    {"lesson":"museum-02-stream-the-curator.md","operations":[{"op":"write","file":"src/index.ts","block":"museum-02-stream-the-curator-nodejs-1"}]},
+    {"lesson":"museum-03-curator-voice.md","operations":[{"op":"write","file":"src/index.ts","block":"museum-03-curator-voice-nodejs-1"}]},
+    {"lesson":"museum-04-approved-facts.md","operations":[
+      {"op":"replace-import","file":"src/index.ts","name":"./curator.js","block":"museum-04-approved-facts-nodejs-1"},
+      {"op":"after","file":"src/index.ts","anchor":"Write for a broad public audience with warmth, clarity, and historical restraint.","block":"museum-04-approved-facts-shared-1"},
+      {"op":"before","file":"src/index.ts","anchor":"async function main(","block":"museum-04-approved-facts-nodejs-2"},
+      {"op":"replace-function","file":"src/index.ts","name":"main","block":"museum-04-approved-facts-nodejs-3"}
+    ]},
+    {"lesson":"museum-05-guardrails.md","operations":[
+      {"op":"replace-import","file":"src/index.ts","name":"@github/copilot-sdk","block":"museum-05-guardrails-nodejs-1"},
+      {"op":"replace","file":"src/index.ts","anchor":"  factSets,","text":"  factSets,\n  generationTimeoutMs,"},
+      {"op":"before","file":"src/index.ts","anchor":"async function main(","block":"museum-05-guardrails-nodejs-2"},
+      {"op":"replace-function","file":"src/index.ts","name":"main","block":"museum-05-guardrails-nodejs-3"}
+    ]},
+    {"lesson":"museum-06-prove-the-structure.md","operations":[
+      {"op":"replace","file":"src/index.ts","anchor":"  factSets,","text":"  factSets,\n  formatValidation,\n  validateExhibit,"},
+      {"op":"replace-region","file":"src/index.ts","anchor":"    console.log();\n    await runSession(","end":"      generationTimeoutMs,\n    );","block":"museum-06-prove-the-structure-nodejs-1"}
+    ]},
+    {"lesson":"museum-07-wikipedia-research.md","operations":[
+      {"op":"replace","file":"src/index.ts","anchor":"  factSets,","text":"  factSets,\n  extractSources,\n  researchTimeoutMs,\n  wikipediaPermissionHandler,\n  wikipediaServer,\n  wikipediaTools,\n  type WikipediaSource,"},
+      {"op":"before","file":"src/index.ts","anchor":"function buildExhibitPrompt(","block":"museum-07-wikipedia-research-nodejs-1"},
+      {"op":"before","file":"src/index.ts","anchor":"async function main(","block":"museum-07-wikipedia-research-nodejs-2"},
+      {"op":"before","file":"src/index.ts","anchor":"    console.log();\n    const exhibit = await runSession(","block":"museum-07-wikipedia-research-nodejs-3"},
+      {"op":"after","file":"src/index.ts","anchor":"    console.log(formatValidation(validateExhibit(exhibit)));","block":"museum-07-wikipedia-research-nodejs-4"}
+    ]},
+    {"lesson":"museum-08-interactive-exhibit-page.md","operations":[
+      {"op":"replace","file":"src/index.ts","anchor":"  factSets,","text":"  factSets,\n  captureArtifactState,\n  verifyArtifactUpdate,\n  exhibitFileName,\n  exhibitWritePermission,"},
+      {"op":"before","file":"src/index.ts","anchor":"async function main(","block":"museum-08-interactive-exhibit-page-nodejs-1"},
+      {"op":"before","file":"src/index.ts","anchor":"\n  } catch (error) {","block":"museum-08-interactive-exhibit-page-nodejs-2"}
+    ]}
+  ]
+}

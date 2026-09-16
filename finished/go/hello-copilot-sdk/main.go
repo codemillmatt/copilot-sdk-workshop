@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync/atomic"
 
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 type accessibilityRule struct {
@@ -86,10 +88,16 @@ func readQuestion() string {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	question := readQuestion()
 	if question == "" {
-		fmt.Fprintln(os.Stderr, "Enter an accessibility question to continue.")
-		return
+		return fmt.Errorf("Enter an accessibility question to continue.")
 	}
 
 	lookup := copilot.DefineTool(
@@ -100,23 +108,24 @@ func main() {
 	lookup.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 		Streaming:      copilot.Bool(true),
 		Tools:          []copilot.Tool{lookup},
 		AvailableTools: []string{"accessibility_rule_lookup"},
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	fmt.Println("\nCopilot:")
-	if err := streamResponse(session, "Use accessibility_rule_lookup to answer this question: "+question); err != nil {
-		panic(err)
-	}
+	return streamResponse(session, "Use accessibility_rule_lookup to answer this question: "+question)
 }

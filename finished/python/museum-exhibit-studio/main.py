@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from copilot import CopilotClient, PermissionHandler
+from copilot import CopilotClient
 
 from curator import (
     APPROVED_FACT_LOOKUP_NAME,
@@ -18,13 +18,16 @@ from curator import (
     ask_line,
     ask_yes_no,
     bound_facts,
+    capture_artifact_state,
     create_approved_fact_lookup,
+    deny_unexpected_permission,
     exhibit_write_permission,
     extract_sources,
     format_validation,
     read_facts,
     stream_exhibit,
     validate_exhibit,
+    verify_artifact_update,
     wikipedia_permission_handler,
     wikipedia_server,
 )
@@ -114,7 +117,7 @@ def selected_model() -> str | None:
 def generation_config(approved_facts: Iterable[str]) -> dict[str, Any]:
     config: dict[str, Any] = {
         "client_name": "museum-exhibit-studio",
-        "on_permission_request": PermissionHandler.approve_all,
+        "on_permission_request": deny_unexpected_permission,
         "tools": [create_approved_fact_lookup(approved_facts)],
         "available_tools": [APPROVED_FACT_LOOKUP_NAME],
         "streaming": True,
@@ -147,6 +150,7 @@ def html_config(working_directory: str) -> dict[str, Any]:
         "available_tools": ["builtin:apply_patch"],
         "on_permission_request": exhibit_write_permission(working_directory),
         "streaming": True,
+        "working_directory": working_directory,
     }
     model = selected_model()
     if model is not None:
@@ -171,41 +175,43 @@ async def run_session(config: dict[str, Any], prompt: str, timeout: float) -> st
 
 
 async def main() -> int:
-    print("=== Museum Exhibit Studio ===")
-    print()
-    print("Approved fact sets:")
-    for index, fact_set in enumerate(FACT_SETS, start=1):
-        print(f"{index}. {fact_set.label}")
-    print()
-
-    choice = ask_line("Choose a fact set [1-3, default 1]: ")
-    selected_index = int(choice) - 1 if choice in {"1", "2", "3"} else 0
-    facts = list(FACT_SETS[selected_index].facts)
-    for index, fact in enumerate(facts, start=1):
-        print(f"{index}. {fact}")
-    print()
-
-    if not ask_yes_no("Use these facts?", True):
-        facts = read_facts()
-    facts = bound_facts(facts)
-
-    consulted_sources: tuple[Any, ...] = ()
-    if ask_yes_no("Research the subject on Wikipedia first?", False):
-        print()
-        try:
-            research_notes = await run_session(
-                research_config(),
-                build_research_prompt(facts),
-                RESEARCH_TIMEOUT_SECONDS,
-            )
-            consulted_sources = extract_sources(research_notes).sources
-            print(
-                "Research notes are background for you only. They are not added to the approved facts."
-            )
-        except Exception as error:
-            print(f"Wikipedia research did not complete: {error}")
-
     try:
+        print("=== Museum Exhibit Studio ===")
+        print()
+        print("Approved fact sets:")
+        for index, fact_set in enumerate(FACT_SETS, start=1):
+            print(f"{index}. {fact_set.label}")
+        print()
+
+        choice = ask_line("Choose a fact set [1-3, default 1]: ")
+        selected_index = int(choice) - 1 if choice in {"1", "2", "3"} else 0
+        facts = list(FACT_SETS[selected_index].facts)
+        for index, fact in enumerate(facts, start=1):
+            print(f"{index}. {fact}")
+        print()
+
+        if not ask_yes_no("Use these facts?", True):
+            facts = read_facts()
+        facts = bound_facts(facts)
+
+        model_reported_sources: tuple[Any, ...] = ()
+        if ask_yes_no("Research the subject on Wikipedia first?", False):
+            print()
+            try:
+                research_notes = await run_session(
+                    research_config(),
+                    build_research_prompt(facts),
+                    RESEARCH_TIMEOUT_SECONDS,
+                )
+                model_reported_sources = extract_sources(research_notes).sources
+                if not model_reported_sources:
+                    print("No usable model-reported citations were returned; the research remains unverified.")
+                print(
+                    "Research notes are background for you only. They are not added to the approved facts."
+                )
+            except Exception as error:
+                print(f"Wikipedia research did not complete: {error}")
+
         print()
         exhibit = await run_session(
             generation_config(facts),
@@ -215,20 +221,23 @@ async def main() -> int:
 
         print()
         print(format_validation(validate_exhibit(exhibit)))
-        if consulted_sources:
+        if model_reported_sources:
             print()
-            print("Consulted Wikipedia sources:")
-            for source in consulted_sources:
+            print("Model-reported Wikipedia sources (unverified):")
+            for source in model_reported_sources:
                 print(f"- {source.title}: {source.url}")
+            print("A human must verify these links and the claims they support; parsing does not prove they were consulted.")
 
         print()
         if ask_yes_no("Generate an interactive exhibit.html?", False):
+            before = capture_artifact_state(str(Path.cwd()), "exhibit.html")
             await run_session(
                 html_config(str(Path.cwd())),
                 build_html_prompt(exhibit),
                 GENERATION_TIMEOUT_SECONDS,
             )
-            print("Wrote exhibit.html. Open it in a browser to review the exhibit.")
+            verify_artifact_update(before)
+            print("Verified a new or updated exhibit.html. Review its source and open it in a browser.")
         return 0
     except TimeoutError:
         print("The curator did not respond in time. Try again.", file=sys.stderr)

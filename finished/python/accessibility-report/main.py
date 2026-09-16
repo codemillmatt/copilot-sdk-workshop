@@ -1,2 +1,6 @@
-print("The Copilot SDK workshop starter is ready.")
-print("Continue with Step 1 to create your first Copilot session.")
+import asyncio
+
+from report import main
+
+if __name__ == "__main__":
+    asyncio.run(main())

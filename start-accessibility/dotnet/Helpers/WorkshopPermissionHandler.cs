@@ -4,7 +4,7 @@ using GitHub.Copilot.Rpc;
 
 namespace HelloCopilotSDK.Helpers;
 
-#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.7.
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 public static class WorkshopPermissionHandler
 {
@@ -17,7 +17,7 @@ public static class WorkshopPermissionHandler
         {
             var decision = request switch
             {
-                PermissionRequestMcp { ServerName: "playwright" } navigation
+                PermissionRequestMcp { ServerName: "playwright", ManagedApprovalRequired: not true } navigation
                     when IsPlaywrightTool(navigation, "browser_navigate") &&
                          IsNavigationToTarget(navigation.Args, allowedTarget) =>
                     PermissionDecision.ApproveOnce(),
@@ -30,8 +30,8 @@ public static class WorkshopPermissionHandler
     }
 
     private static bool IsPlaywrightTool(PermissionRequestMcp request, string toolName) =>
-        request.ToolName.Equals(toolName, StringComparison.Ordinal) ||
-        request.ToolName.Equals($"{request.ServerName}-{toolName}", StringComparison.Ordinal);
+        string.Equals(request.ToolName, toolName, StringComparison.Ordinal) ||
+        string.Equals(request.ToolName, $"{request.ServerName}-{toolName}", StringComparison.Ordinal);
 
     private static bool IsNavigationToTarget(JsonElement? arguments, Uri allowedTarget)
     {

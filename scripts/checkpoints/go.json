@@ -1,0 +1,236 @@
+{
+  "accessibility": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"01-first-session-go-1"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"02-streaming-go-1"},
+        {"op":"append","file":"main.go","block":"02-streaming-go-2"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"strings\""},
+        {"op":"before","file":"main.go","anchor":"func streamResponse(","block":"03-local-tool-go-1"},
+        {"op":"after","file":"main.go","anchor":"func run() (err error) {","block":"03-local-tool-go-2","indent":4},
+        {"op":"replace-tail","file":"main.go","anchor":"session, err := client.CreateSession(","block":"03-local-tool-go-3"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"encoding/json\"\n\t\"net/url\"\n\t\"path/filepath\"\n\t\"sort\"\n\t\"time\""},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-2"},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-3"},
+        {"op":"after","file":"main.go","anchor":"func run() (err error) {","block":"04-mcp-safety-go-1","indent":4},
+        {"op":"replace-tail","file":"main.go","anchor":"lookup := copilot.DefineTool(","block":"04-mcp-safety-go-4"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"replace-tail","file":"main.go","anchor":"workingDirectory, err := os.Getwd()","block":"05-combine-tools-go-1"},
+        {"op":"append","file":"main.go","block":"05-combine-tools-go-2"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"before","file":"main.go","anchor":"func main()","block":"06-structured-report-go-1"},
+        {"op":"replace-tail","file":"main.go","anchor":"func main()","block":"06-structured-report-go-2"}
+      ]
+    },
+    {"lesson":"07-run-explain.md","operations":[]},
+    {
+      "lesson": "08-model-selection.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"strconv\""},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"08-model-selection-go-1"},
+        {"op":"replace-region","file":"main.go","anchor":"client := copilot.NewClient(","end":"\n\t})","endOccurrence":"last","block":"08-model-selection-go-2"}
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {"op":"replace-function","file":"main.go","anchor":"func permissionForTarget(","block":"09-interactive-html-report-go-1"},
+        {"op":"replace-region","file":"main.go","anchor":"AvailableTools:","end":"OnPermissionRequest: permissionForTarget(target),","block":"09-interactive-html-report-go-2"},
+        {"op":"replace-function","file":"main.go","anchor":"func reportPrompt(","block":"09-interactive-html-report-go-3"},
+        {"op":"replace-braced","file":"main.go","anchor":"if err := streamResponse(session, reportPrompt(target)); err != nil {","block":"09-html-go-artifact-check"}
+      ]
+    }
+  ],
+  "accessibility-html-direct": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"01-first-session-go-1"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"02-streaming-go-1"},
+        {"op":"append","file":"main.go","block":"02-streaming-go-2"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"strings\""},
+        {"op":"before","file":"main.go","anchor":"func streamResponse(","block":"03-local-tool-go-1"},
+        {"op":"after","file":"main.go","anchor":"func run() (err error) {","block":"03-local-tool-go-2","indent":4},
+        {"op":"replace-tail","file":"main.go","anchor":"session, err := client.CreateSession(","block":"03-local-tool-go-3"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"encoding/json\"\n\t\"net/url\"\n\t\"path/filepath\"\n\t\"sort\"\n\t\"time\""},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-2"},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-3"},
+        {"op":"after","file":"main.go","anchor":"func run() (err error) {","block":"04-mcp-safety-go-1","indent":4},
+        {"op":"replace-tail","file":"main.go","anchor":"lookup := copilot.DefineTool(","block":"04-mcp-safety-go-4"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"replace-tail","file":"main.go","anchor":"workingDirectory, err := os.Getwd()","block":"05-combine-tools-go-1"},
+        {"op":"append","file":"main.go","block":"05-combine-tools-go-2"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"before","file":"main.go","anchor":"func main()","block":"06-structured-report-go-1"},
+        {"op":"replace-tail","file":"main.go","anchor":"func main()","block":"06-structured-report-go-2"}
+      ]
+    },
+    {"lesson":"07-run-explain.md","operations":[]},
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {"op":"replace-function","file":"main.go","anchor":"func permissionForTarget(","block":"09-interactive-html-report-go-1"},
+        {"op":"replace-region","file":"main.go","anchor":"AvailableTools:","end":"OnPermissionRequest: permissionForTarget(target),","block":"09-interactive-html-report-go-2"},
+        {"op":"replace-function","file":"main.go","anchor":"func reportPrompt(","block":"09-interactive-html-report-go-3"},
+        {"op":"replace-braced","file":"main.go","anchor":"if err := streamResponse(session, reportPrompt(target)); err != nil {","block":"09-html-go-artifact-check"}
+      ]
+    }
+  ],
+  "accessibility-references": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"01-first-session-go-3"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"02-streaming-go-4"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"03-local-tool-go-5"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"encoding/json\"\n\t\"net/url\"\n\t\"path/filepath\"\n\t\"sort\"\n\t\"time\""},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-2"},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"04-mcp-safety-go-3"},
+        {"op":"after","file":"main.go","anchor":"func run() (err error) {","block":"04-mcp-safety-go-1","indent":4},
+        {"op":"replace-tail","file":"main.go","anchor":"lookup := copilot.DefineTool(","block":"04-mcp-safety-go-6"},
+        {"op":"append","file":"main.go","text":"\treturn nil\n}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"05-combine-tools-go-3"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"replace-tail","file":"main.go","anchor":"func main()","block":"06-structured-report-go-3"}
+      ]
+    }
+  ],
+  "museum": [
+    {
+      "lesson": "museum-01-first-curator-session.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"museum-01-first-curator-session-go-1"}
+      ]
+    },
+    {
+      "lesson": "museum-02-stream-the-curator.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"museum-02-stream-the-curator-go-1"}
+      ]
+    },
+    {
+      "lesson": "museum-03-curator-voice.md",
+      "operations": [
+        {"op":"write","file":"main.go","block":"museum-03-curator-voice-go-1"}
+      ]
+    },
+    {
+      "lesson": "museum-04-approved-facts.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"strconv\""},
+        {"op":"after","file":"main.go","anchor":"Write for a broad public audience with warmth, clarity, and historical restraint.","block":"museum-04-approved-facts-shared-1"},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"museum-04-approved-facts-go-1"},
+        {"op":"replace-tail","file":"main.go","anchor":"func main()","block":"museum-04-approved-facts-go-2"}
+      ]
+    },
+    {
+      "lesson": "museum-05-guardrails.md",
+      "operations": [
+        {"op":"after","file":"main.go","anchor":"import (","text":"\t\"strings\"\n\t\"time\""},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"museum-05-guardrails-go-1"},
+        {"op":"replace-tail","file":"main.go","anchor":"func main()","block":"museum-05-guardrails-go-2"}
+      ]
+    },
+    {
+      "lesson": "museum-06-prove-the-structure.md",
+      "operations": [
+        {"op":"replace-tail","file":"main.go","anchor":"fmt.Println()\n\tif _, err := runSession(","block":"museum-06-prove-the-structure-go-1"},
+        {"op":"append","file":"main.go","text":"}"}
+      ]
+    },
+    {
+      "lesson": "museum-07-wikipedia-research.md",
+      "operations": [
+        {"op":"before","file":"main.go","anchor":"func buildExhibitPrompt(","block":"museum-07-wikipedia-research-go-1"},
+        {"op":"before","file":"main.go","anchor":"func main()","block":"museum-07-wikipedia-research-go-2"},
+        {"op":"before","file":"main.go","anchor":"exhibitConfig, err := generationConfig(workingDirectory, facts)","block":"museum-07-wikipedia-research-go-3"},
+        {"op":"after","file":"main.go","anchor":"fmt.Println(FormatValidation(ValidateExhibit(exhibit)))","block":"museum-07-wikipedia-research-go-4"}
+      ]
+    },
+    {
+      "lesson": "museum-08-interactive-exhibit-page.md",
+      "operations": [
+        {"op":"before","file":"main.go","anchor":"func main()","block":"museum-08-interactive-exhibit-page-go-1"},
+        {"op":"replace-tail","file":"main.go","anchor":"return nil","occurrence":"last","block":"museum-08-interactive-exhibit-page-go-2"},
+        {"op":"append","file":"main.go","text":"}"}
+      ]
+    }
+  ]
+}

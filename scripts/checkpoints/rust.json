@@ -1,0 +1,254 @@
+{
+  "accessibility": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"01-first-session-rust-1"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"02-streaming-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"02-streaming-rust-2"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"replace-region","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;","end":"use github_copilot_sdk::{Client, ClientOptions};","block":"03-local-tool-rust-1"},
+        {"op":"before","file":"src/main.rs","anchor":"macro_rules! stream_response","block":"03-local-tool-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"03-local-tool-rust-3"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","text":"use std::collections::HashSet;\nuse std::path::{Path, PathBuf};\nuse std::time::SystemTime;\nuse github_copilot_sdk::handler::{PermissionHandler, PermissionResult};\nuse github_copilot_sdk::types::{McpServerConfig, McpStdioServerConfig, PermissionRequestData, RequestId, SessionId};\nuse indexmap::IndexMap;\nuse url::Url;"},
+        {"op":"replace","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;\n","text":""},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-2"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-3"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","text":"#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-4"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"05-combine-tools-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"let working_directory = std::env::current_dir()?;","block":"05-combine-tools-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"05-combine-tools-rust-3"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"replace-function","file":"src/main.rs","anchor":"fn combined_tools_prompt(","block":"06-structured-report-rust-1"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"06-structured-report-rust-2"}
+      ]
+    },
+    {"lesson":"07-run-explain.md","operations":[]},
+    {
+      "lesson": "08-model-selection.md",
+      "operations": [
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"08-model-selection-rust-1"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"let mut config = SessionConfig::default();","block":"08-model-selection-rust-2"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","block":"09-html-rust-artifact-import"},
+        {"op":"after","file":"src/main.rs","anchor":"struct ScopedPermissions {","text":"    report_path: PathBuf,"},
+        {"op":"replace-region","file":"src/main.rs","anchor":"if kind_allowed","end":"\"This workshop allows Playwright to navigate only to the exact requested target.\"\n                    .to_owned(),\n            ))\n        }","block":"09-interactive-html-report-rust-1"},
+        {"op":"replace-region","file":"src/main.rs","anchor":"config.available_tools = Some(vec![","end":"\"playwright-browser_navigate\".to_owned(),\n    ]);","text":""},
+        {"op":"replace-region","file":"src/main.rs","anchor":"let config = config.with_permission_handler(Arc::new(ScopedPermissions {","end":"}));","block":"09-interactive-html-report-rust-2"},
+        {"op":"replace-function","file":"src/main.rs","anchor":"fn report_prompt(","block":"09-interactive-html-report-rust-3"},
+        {"op":"replace","file":"src/main.rs","anchor":"stream_response!(session, report_prompt(&target));","block":"09-html-rust-artifact-check"}
+      ]
+    }
+  ],
+  "accessibility-html-direct": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"01-first-session-rust-1"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"02-streaming-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"02-streaming-rust-2"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"replace-region","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;","end":"use github_copilot_sdk::{Client, ClientOptions};","block":"03-local-tool-rust-1"},
+        {"op":"before","file":"src/main.rs","anchor":"macro_rules! stream_response","block":"03-local-tool-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"03-local-tool-rust-3"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","text":"use std::collections::HashSet;\nuse std::path::{Path, PathBuf};\nuse std::time::SystemTime;\nuse github_copilot_sdk::handler::{PermissionHandler, PermissionResult};\nuse github_copilot_sdk::types::{McpServerConfig, McpStdioServerConfig, PermissionRequestData, RequestId, SessionId};\nuse indexmap::IndexMap;\nuse url::Url;"},
+        {"op":"replace","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;\n","text":""},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-2"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-3"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","text":"#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-4"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"05-combine-tools-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"let working_directory = std::env::current_dir()?;","block":"05-combine-tools-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"05-combine-tools-rust-3"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"replace-function","file":"src/main.rs","anchor":"fn combined_tools_prompt(","block":"06-structured-report-rust-1"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"06-structured-report-rust-2"}
+      ]
+    },
+    {"lesson":"07-run-explain.md","operations":[]},
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","block":"09-html-rust-artifact-import"},
+        {"op":"after","file":"src/main.rs","anchor":"struct ScopedPermissions {","text":"    report_path: PathBuf,"},
+        {"op":"replace-region","file":"src/main.rs","anchor":"if kind_allowed","end":"\"This workshop allows Playwright to navigate only to the exact requested target.\"\n                    .to_owned(),\n            ))\n        }","block":"09-interactive-html-report-rust-1"},
+        {"op":"replace-region","file":"src/main.rs","anchor":"config.available_tools = Some(vec![","end":"\"playwright-browser_navigate\".to_owned(),\n    ]);","text":""},
+        {"op":"replace-region","file":"src/main.rs","anchor":"let config = config.with_permission_handler(Arc::new(ScopedPermissions {","end":"}));","block":"09-interactive-html-report-rust-2"},
+        {"op":"replace-function","file":"src/main.rs","anchor":"fn report_prompt(","block":"09-interactive-html-report-rust-3"},
+        {"op":"replace","file":"src/main.rs","anchor":"stream_response!(session, report_prompt(&target));","block":"09-html-rust-artifact-check"}
+      ]
+    }
+  ],
+  "accessibility-references": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"01-first-session-rust-3"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"02-streaming-rust-4"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"03-local-tool-rust-5"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","text":"use std::collections::HashSet;\nuse std::path::{Path, PathBuf};\nuse std::time::SystemTime;\nuse github_copilot_sdk::handler::{PermissionHandler, PermissionResult};\nuse github_copilot_sdk::types::{McpServerConfig, McpStdioServerConfig, PermissionRequestData, RequestId, SessionId};\nuse indexmap::IndexMap;\nuse url::Url;"},
+        {"op":"replace","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;\n","text":""},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-2"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"04-mcp-safety-rust-3"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","text":"#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-1"},
+        {"op":"append","file":"src/main.rs","block":"04-mcp-safety-rust-4"},
+        {"op":"append","file":"src/main.rs","text":"}"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"let mut config = SessionConfig::default();","block":"04-mcp-safety-rust-6"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"05-combine-tools-rust-4"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op":"replace-tail","file":"src/main.rs","anchor":"fn combined_tools_prompt(","block":"06-structured-report-rust-3"}
+      ]
+    }
+  ],
+  "museum": [
+    {
+      "lesson": "museum-01-first-curator-session.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"museum-01-first-curator-session-rust-1"}
+      ]
+    },
+    {
+      "lesson": "museum-02-stream-the-curator.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"museum-02-stream-the-curator-rust-1"}
+      ]
+    },
+    {
+      "lesson": "museum-03-curator-voice.md",
+      "operations": [
+        {"op":"write","file":"src/main.rs","block":"museum-03-curator-voice-rust-1"}
+      ]
+    },
+    {
+      "lesson": "museum-04-approved-facts.md",
+      "operations": [
+        {"op":"replace","file":"src/main.rs","anchor":"use museum_exhibit_studio::{GENERATION_TIMEOUT, RuntimeError, stream_exhibit};","block":"museum-04-approved-facts-rust-1"},
+        {"op":"after","file":"src/main.rs","anchor":"Write for a broad public audience with warmth, clarity, and historical restraint.","block":"museum-04-approved-facts-shared-1"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-04-approved-facts-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-04-approved-facts-rust-3"}
+      ]
+    },
+    {
+      "lesson": "museum-05-guardrails.md",
+      "operations": [
+        {"op":"replace-region","file":"src/main.rs","anchor":"use github_copilot_sdk::permission;","end":"    ask_yes_no, bound_facts, fact_sets, read_facts, stream_exhibit,\n};","block":"museum-05-guardrails-rust-1"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-05-guardrails-rust-2"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-05-guardrails-rust-3"}
+      ]
+    },
+    {
+      "lesson": "museum-06-prove-the-structure.md",
+      "operations": [
+        {"op":"after","file":"src/main.rs","anchor":"use museum_exhibit_studio::{","text":"    format_validation, validate_exhibit,"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"println!();\n    run_session(\n        generation_config(&facts)?,","block":"museum-06-prove-the-structure-rust-1"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    },
+    {
+      "lesson": "museum-07-wikipedia-research.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","text":"use std::sync::Arc;"},
+        {"op":"replace","file":"src/main.rs","anchor":"use github_copilot_sdk::{Client, ClientOptions};","block":"museum-07-wikipedia-research-rust-1"},
+        {"op":"after","file":"src/main.rs","anchor":"use museum_exhibit_studio::{","text":"    RESEARCH_TIMEOUT, WIKIPEDIA_TOOLS, extract_sources,\n    wikipedia_permission_handler, wikipedia_server,"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-07-wikipedia-research-rust-2"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-07-wikipedia-research-rust-3"},
+        {"op":"before","file":"src/main.rs","anchor":"let exhibit = run_session(","block":"museum-07-wikipedia-research-rust-4"},
+        {"op":"after","file":"src/main.rs","anchor":"println!(\"{}\", format_validation(&validate_exhibit(&exhibit)));","block":"museum-07-wikipedia-research-rust-5"}
+      ]
+    },
+    {
+      "lesson": "museum-08-interactive-exhibit-page.md",
+      "operations": [
+        {"op":"prepend","file":"src/main.rs","text":"use std::path::PathBuf;"},
+        {"op":"after","file":"src/main.rs","anchor":"use museum_exhibit_studio::{","text":"    EXHIBIT_FILE_NAME, exhibit_write_permission,\n    capture_artifact_state, verify_artifact_update,"},
+        {"op":"before","file":"src/main.rs","anchor":"#[tokio::main]","block":"museum-08-interactive-exhibit-page-rust-1"},
+        {"op":"replace-tail","file":"src/main.rs","anchor":"Ok(())","occurrence":"last","block":"museum-08-interactive-exhibit-page-rust-2"},
+        {"op":"append","file":"src/main.rs","text":"}"}
+      ]
+    }
+  ]
+}

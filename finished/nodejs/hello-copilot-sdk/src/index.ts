@@ -21,9 +21,10 @@ if (!question) {
   process.exitCode = 1;
 } else {
   const client = new CopilotClient();
-  await client.start();
   try {
+    await client.start();
     const session = await client.createSession({
+      onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
       streaming: true,
       tools: [accessibilityRuleLookup],
       availableTools: ["accessibility_rule_lookup"],

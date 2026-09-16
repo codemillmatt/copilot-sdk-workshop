@@ -1,6 +1,6 @@
 # Optional: Generate an interactive HTML report
 
-> **Time:** 15 minutes  
+> **Pace:** Self-paced
 > **Prerequisite:** Complete the seven core steps first. This extension also works after optional
 > model selection.
 
@@ -22,30 +22,57 @@ directory. Reject shell commands, other file writes, and every other permission 
 The report prompt remains evidence-based: it must navigate, read the current-run snapshot, and look
 up catalog guidance before it writes the HTML artifact.
 
+Preserve exact target navigation while adding the single output path. The application's artifact
+check is separate from permission approval: it must observe new or changed file content before it
+announces an update.
+
 :::language dotnet
 ## Scope the .NET write permission
 
 Replace `CreateForTarget` in `Helpers/WorkshopPermissionHandler.cs`. The helper now
 also receives the application directory and permits only the one normalized report path:
 
+<!-- code-id: 09-interactive-html-report-dotnet-1 -->
 ```csharp
 public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> CreateForTarget(
     Uri allowedTarget,
     string workingDirectory)
 {
     ArgumentNullException.ThrowIfNull(allowedTarget);
-    var reportPath = Path.GetFullPath(Path.Combine(workingDirectory, "accessibility-report.html"));
+    ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
+    var applicationDirectory = Path.GetFullPath(workingDirectory);
+    var reportPath = Path.Combine(applicationDirectory, "accessibility-report.html");
+
+    bool IsReportPath(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+        try
+        {
+            var requestedPath = Path.GetFullPath(fileName, applicationDirectory);
+            return requestedPath.Equals(reportPath, OperatingSystem.IsWindows()
+                       ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+                   new FileInfo(reportPath).LinkTarget is null &&
+                   !Directory.Exists(reportPath);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     return (request, _) =>
     {
         var decision = request switch
         {
-            PermissionRequestMcp { ServerName: "playwright" } navigation
+            PermissionRequestMcp { ServerName: "playwright", ManagedApprovalRequired: not true } navigation
                 when IsPlaywrightTool(navigation, "browser_navigate") &&
                      IsNavigationToTarget(navigation.Args, allowedTarget) =>
                 PermissionDecision.ApproveOnce(),
-            PermissionRequestWrite write
-                when Path.GetFullPath(write.FileName).Equals(reportPath, StringComparison.OrdinalIgnoreCase) =>
+            PermissionRequestWrite { ManagedApprovalRequired: not true, RequestSandboxBypass: not true } write
+                when IsReportPath(write.FileName) =>
                 PermissionDecision.ApproveOnce(),
             _ => PermissionDecision.Reject(
                 "This workshop allows only exact target navigation and writing accessibility-report.html.")
@@ -56,22 +83,42 @@ public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecis
 }
 ```
 
-Keep the existing helper methods. In `Program.cs`, pass the existing `workingDirectory` and add the
-source-qualified built-in tool:
+Keep the existing helper methods. In `Program.cs`, remove only the old one-argument
+`OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),` entry from the
+`config` initializer. Keep every other entry, including any selected model.
 
+Replace the section from `await using var session = await client.CreateSessionAsync(config);`
+through the old final send/output block with the following top-level statements. Do not paste
+these statements inside the initializer. `ArtifactVerifier` is supplied in the helper namespace
+already imported:
+
+<!-- code-id: 09-interactive-html-report-dotnet-2 -->
 ```csharp
-OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri, workingDirectory),
-AvailableTools =
+config.WorkingDirectory = workingDirectory;
+config.OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri, workingDirectory);
+config.AvailableTools =
 [
     "accessibility_rule_lookup",
     "read_latest_accessibility_snapshot",
     "playwright-browser_navigate",
     "builtin:apply_patch"
-],
+];
+
+var artifact = ArtifactVerifier.CaptureArtifactState(workingDirectory, "accessibility-report.html");
+await using var session = await client.CreateSessionAsync(config);
+
+Console.WriteLine($"\nAnalyzing: {targetUri.AbsoluteUri}\n");
+Console.WriteLine("Model response (not file verification):");
+await ResponseStreamer.SendAndPrintAsync(session, Prompts.CreateReportPrompt(targetUri));
+
+ArtifactVerifier.VerifyArtifactUpdate(artifact);
+Console.WriteLine("Verified a new or changed accessibility-report.html. Review its source and accessibility before use.");
 ```
 
-Replace the body of `CreateReportPrompt` in `Helpers/Prompts.cs`:
+Replace the entire expression-bodied `CreateReportPrompt` member in `Helpers/Prompts.cs`,
+including its signature:
 
+<!-- code-id: 09-interactive-html-report-dotnet-3 -->
 ```csharp
 public static string CreateReportPrompt(Uri targetUri) => $"""
     Prepare an evidence-based accessibility review of {targetUri.AbsoluteUri}.
@@ -101,13 +148,15 @@ public static string CreateReportPrompt(Uri targetUri) => $"""
 In `src/workshop.ts`, replace `permissionForTarget` with a version that preserves
 exact navigation and adds only the normalized report path:
 
+<!-- code-id: 09-interactive-html-report-nodejs-1 -->
 ```typescript
 export function permissionForTarget(target: URL, workingDirectory: string): PermissionHandler {
   const reportPath = resolve(workingDirectory, "accessibility-report.html");
   return (request) => {
     if (request.kind === "mcp" && request.serverName === "playwright" &&
       (request.toolName === "browser_navigate" || request.toolName === "playwright-browser_navigate") &&
-      typeof request.args?.url === "string" && sameUrl(new URL(request.args.url), target)) {
+      request.args !== null && typeof request.args === "object" && !Array.isArray(request.args) &&
+      typeof request.args.url === "string" && URL.canParse(request.args.url) && sameUrl(new URL(request.args.url), target)) {
       return { kind: "approve-once" };
     }
     if (request.kind === "write" && typeof request.fileName === "string" &&
@@ -122,6 +171,7 @@ export function permissionForTarget(target: URL, workingDirectory: string): Perm
 In `src/report.ts`, pass the working directory to the handler and append the built-in
 tool to `availableTools`:
 
+<!-- code-id: 09-interactive-html-report-nodejs-2 -->
 ```typescript
 onPermissionRequest: permissionForTarget(target, process.cwd()),
 availableTools: [
@@ -134,6 +184,7 @@ availableTools: [
 
 Replace `reportPrompt` in `src/workshop.ts`:
 
+<!-- code-id: 09-interactive-html-report-nodejs-3 -->
 ```typescript
 export function reportPrompt(target: URL): string {
   return `Prepare an evidence-based accessibility review of ${target.href}.
@@ -154,6 +205,29 @@ Do not write any other file. After the write succeeds, respond only with:
 Created accessibility-report.html`;
 }
 ```
+
+Import the supplied artifact checks in `src/report.ts`:
+
+<!-- code-id: 09-html-nodejs-artifact-import -->
+```typescript
+import { captureArtifactState, verifyArtifactUpdate } from "./workshop.js";
+```
+
+Replace the inner `try` block that sends the report prompt with this block. Keep its existing
+`finally` that disconnects the session and the outer client cleanup:
+
+<!-- code-id: 09-html-nodejs-artifact-check -->
+```typescript
+try {
+  const before = await captureArtifactState(process.cwd(), "accessibility-report.html");
+  await streamResponse(session, reportPrompt(target));
+  await verifyArtifactUpdate(before);
+  console.log("Verified a new or updated accessibility-report.html. Review its source before opening it.");
+}
+```
+
+The helper compares the exact file's contents before and after the turn and rejects missing,
+empty, unchanged, directory, or symbolic-link output. A model saying "Created" is not sufficient.
 :::
 
 :::language python
@@ -161,6 +235,7 @@ Created accessibility-report.html`;
 
 In `workshop.py`, replace `permission_for_target` with this path-aware version:
 
+<!-- code-id: 09-interactive-html-report-python-1 -->
 ```python
 def permission_for_target(target: str, working_directory: str):
     report_path = Path(working_directory, "accessibility-report.html").resolve()
@@ -182,6 +257,7 @@ def permission_for_target(target: str, working_directory: str):
 In `report.py`, pass the current directory to the permission handler and append the
 source-qualified built-in tool:
 
+<!-- code-id: 09-interactive-html-report-python-2 -->
 ```python
 on_permission_request=permission_for_target(target, "."),
 available_tools=[
@@ -194,6 +270,7 @@ available_tools=[
 
 Replace `report_prompt` in `workshop.py`:
 
+<!-- code-id: 09-interactive-html-report-python-3 -->
 ```python
 def report_prompt(target: str) -> str:
     return f"""Prepare an evidence-based accessibility review of {target}.
@@ -213,6 +290,34 @@ inserting it into HTML. Make keyboard focus visible.
 Do not write any other file. After the write succeeds, respond only with:
 Created accessibility-report.html"""
 ```
+
+In `report.py`, add this import:
+
+<!-- code-id: 09-html-python-artifact-import -->
+```python
+from workshop import capture_artifact_state, verify_artifact_update
+```
+
+Replace the event subscription/send/wait block, through its final error check, with:
+
+<!-- code-id: 09-html-python-artifact-check -->
+```python
+            before = capture_artifact_state(".", "accessibility-report.html")
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(report_prompt(target))
+                    await done.wait()
+                if error is not None:
+                    raise error
+                verify_artifact_update(before)
+                print("Verified a new or updated accessibility-report.html. Review its source before opening it.")
+            finally:
+                unsubscribe()
+```
+
+The exact output file must be new or content-changed, nonempty, and regular. Missing, unchanged,
+empty, directory, or symbolic-link output is not a verified update. Existing files are not deleted.
 :::
 
 :::language go
@@ -221,11 +326,15 @@ Created accessibility-report.html"""
 Replace `permissionForTarget` in `main.go`. The write branch resolves relative file
 names against the application working directory, so a sibling or parent path is rejected:
 
+<!-- code-id: 09-interactive-html-report-go-1 -->
 ```go
 func permissionForTarget(target, workingDirectory string) copilot.PermissionHandlerFunc {
-	reportPath := filepath.Join(workingDirectory, "accessibility-report.html")
+	reportPath := filepath.Clean(filepath.Join(workingDirectory, "accessibility-report.html"))
 	return func(request copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
-		raw, _ := json.Marshal(request)
+		raw, err := json.Marshal(request)
+		if err != nil {
+			return &rpc.PermissionDecisionReject{}, nil
+		}
 		var value map[string]any
 		if json.Unmarshal(raw, &value) == nil && value["kind"] == "mcp" && value["serverName"] == "playwright" {
 			toolName, _ := value["toolName"].(string)
@@ -236,7 +345,7 @@ func permissionForTarget(target, workingDirectory string) copilot.PermissionHand
 			}
 		}
 		if json.Unmarshal(raw, &value) == nil && value["kind"] == "write" {
-			if fileName, ok := value["fileName"].(string); ok {
+			if fileName, ok := value["fileName"].(string); ok && fileName != "" {
 				candidate := fileName
 				if !filepath.IsAbs(candidate) {
 					candidate = filepath.Join(workingDirectory, candidate)
@@ -254,13 +363,16 @@ func permissionForTarget(target, workingDirectory string) copilot.PermissionHand
 
 Pass `workingDirectory` to the helper and append the source-qualified built-in tool:
 
+<!-- code-id: 09-interactive-html-report-go-2 -->
 ```go
+WorkingDirectory:    workingDirectory,
 AvailableTools:      []string{"accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate", "builtin:apply_patch"},
 OnPermissionRequest: permissionForTarget(target, workingDirectory),
 ```
 
 Replace `reportPrompt`:
 
+<!-- code-id: 09-interactive-html-report-go-3 -->
 ```go
 func reportPrompt(target string) string {
 	return fmt.Sprintf(`Prepare an evidence-based accessibility review of %s.
@@ -281,6 +393,25 @@ Do not write any other file. After the write succeeds, respond only with:
 Created accessibility-report.html`, target)
 }
 ```
+
+Inside run(), replace the final streamResponse(session, reportPrompt(target)) error-check block; keep the following return nil and existing cleanup defers. Works directly after Step 6 or after Step 8 model selection.
+
+<!-- code-id: 09-html-go-artifact-check -->
+```go
+before, err := CaptureArtifactState(workingDirectory, "accessibility-report.html")
+if err != nil {
+	return err
+}
+fmt.Println("Model HTML response (not file verification):")
+if err := streamResponse(session, reportPrompt(target)); err != nil {
+	return err
+}
+if err := VerifyArtifactUpdate(before); err != nil {
+	return err
+}
+fmt.Println("Verified a new or changed nonempty accessibility-report.html. Review its source and behavior before use.")
+```
+
 :::
 
 :::language rust
@@ -288,41 +419,67 @@ Created accessibility-report.html`, target)
 
 Add `report_path: PathBuf` to `ScopedPermissions`. Keep the Step 4 `permission_payload` extraction:
 it prefers the nested `permissionRequest` object when the SDK sends one, falls back to the direct
-object for older payloads, and rejects malformed nested values. Then add this write branch before
-its rejecting `else`:
+object for older payloads, and rejects malformed nested values. Replace the old final permission decision's entire `if`/`else` with the block below.
+Keep the already extracted `server`, `tool`, `requested`, and `kind_allowed` values:
 
+<!-- code-id: 09-interactive-html-report-rust-1 -->
 ```rust
+let payload = permission_payload(&request.extra);
+let write_kind = if request.extra.get("permissionRequest").is_some() {
+    payload
+        .and_then(|payload| payload.get("kind"))
+        .and_then(serde_json::Value::as_str)
+        == Some("write")
+        && (request.kind.is_none()
+            || request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Write))
+} else {
+    request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Write)
+};
 let file_name = permission_payload(&request.extra)
     .and_then(|payload| payload.get("fileName"))
     .and_then(serde_json::Value::as_str);
-let report_write = file_name.is_some_and(|name| {
-    let candidate = Path::new(name);
-    let candidate = if candidate.is_absolute() {
-        candidate.to_path_buf()
-    } else {
-        self.report_path.parent().unwrap_or(Path::new("")).join(candidate)
-    };
-    candidate == self.report_path
-});
+let report_write = write_kind
+    && file_name
+        .filter(|name| !name.is_empty())
+        .is_some_and(|name| {
+            let candidate = Path::new(name);
+            let candidate = if candidate.is_absolute() {
+                candidate.to_path_buf()
+            } else {
+                self.report_path
+                    .parent()
+                    .unwrap_or(Path::new(""))
+                    .join(candidate)
+            };
+            candidate == self.report_path
+        });
 
 if report_write {
     PermissionResult::approve_once()
-} else if server == Some("playwright")
-    && matches!(tool, Some("browser_navigate" | "playwright-browser_navigate"))
-    && requested.as_ref().is_some_and(|url| same_url(url, &self.target))
+} else if kind_allowed
+    && server == Some("playwright")
+    && matches!(
+        tool,
+        Some("browser_navigate" | "playwright-browser_navigate")
+    )
+    && requested
+        .as_ref()
+        .is_some_and(|url| same_url(url, &self.target))
 {
     PermissionResult::approve_once()
 } else {
     PermissionResult::reject(Some(
-        "This workshop allows only exact target navigation and writing accessibility-report.html."
-            .to_owned(),
-    ))
+    "This workshop allows only exact target navigation and writing accessibility-report.html."
+        .to_owned(),
+))
 }
 ```
 
 When creating the permission handler, set the new field and append the built-in tool:
 
+<!-- code-id: 09-interactive-html-report-rust-2 -->
 ```rust
+config.working_directory = Some(working_directory.clone());
 config.available_tools = Some(vec![
     "accessibility_rule_lookup".to_owned(),
     "read_latest_accessibility_snapshot".to_owned(),
@@ -337,6 +494,7 @@ let config = config.with_permission_handler(Arc::new(ScopedPermissions {
 
 Replace `report_prompt`:
 
+<!-- code-id: 09-interactive-html-report-rust-3 -->
 ```rust
 fn report_prompt(target: &Url) -> String {
     format!(
@@ -359,116 +517,101 @@ Created accessibility-report.html"#
     )
 }
 ```
+
+At module scope in src/main.rs; artifact.rs already survives whole-main replacement.
+
+<!-- code-id: 09-html-rust-artifact-import -->
+```rust
+mod artifact;
+use artifact::{capture_artifact_state, verify_artifact_update};
+```
+
+
+Inside the existing response_result timeout's async block, replace only stream_response!(session, report_prompt(&target)); keep its Ok, timeout conversion, session disconnect, and client stop. Works directly after Step 6 or after Step 8.
+
+<!-- code-id: 09-html-rust-artifact-check -->
+```rust
+let before = capture_artifact_state(&working_directory, "accessibility-report.html")?;
+println!("Model HTML response (not file verification):");
+stream_response!(session, report_prompt(&target));
+verify_artifact_update(&before)?;
+println!(
+    "Verified a new or changed nonempty accessibility-report.html. Review its source and behavior before use."
+);
+```
+
 :::
 
 :::language java
 ## Scope the Java write permission
 
-In `src/main/java/workshop/AccessibilityReport.java`, add this helper beside `isExactNavigation`:
+In `src/main/java/workshop/AccessibilityReport.java`, add `isReportWrite` as a class method.
+The navigation checks stay in the supplied `WorkshopPermissionHandler.java`:
 
+<!-- code-id: 09-interactive-html-report-java-1 -->
 ```java
 private static boolean isReportWrite(Map<String, Object> request, Path workingDirectory) {
-    if (request == null || !(request.get("fileName") instanceof String fileName)) {
+    if (request == null || !(request.get("fileName") instanceof String fileName) || fileName.isBlank()
+            || (request.containsKey("requestSandboxBypass")
+                && !Boolean.FALSE.equals(request.get("requestSandboxBypass")))) {
         return false;
     }
-    Path candidate = Path.of(fileName);
-    if (!candidate.isAbsolute()) {
-        candidate = workingDirectory.resolve(candidate);
+    try {
+        Path allowed = workingDirectory.toAbsolutePath().normalize().resolve("accessibility-report.html");
+        Path candidate = workingDirectory.toAbsolutePath().normalize().resolve(Path.of(fileName)).normalize();
+        return candidate.equals(allowed) && !Files.isSymbolicLink(allowed)
+                && !Files.isDirectory(allowed, LinkOption.NOFOLLOW_LINKS);
+    } catch (java.nio.file.InvalidPathException exception) {
+        return false;
     }
-    return candidate.normalize().equals(
-            workingDirectory.resolve("accessibility-report.html").normalize());
 }
 ```
 
-> **Prominent Java safety warning:** The default handler remains fail-closed: it approves an MCP
-> request only after exact-target validation and a write request only after
-> `accessibility-report.html` path validation. Current Java SDK releases do not expose these
-> permission request fields ([github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273)).
-> The existing `--allow-local-demo-mcp` flag is limited to the `mcp` kind. Step 9 additionally
-> requires `--allow-local-demo-write`, which is limited to the `write` kind and the
-> `builtin:apply_patch` tool allowlist but **cannot enforce the output path**. Enable both flags
-> only for this disposable, controlled local workshop target. Never use either fallback for
-> production, shared, or untrusted worktrees.
+> **Strict Java policy:** The pinned SDK exposes permission payload fields. Keep exact-target
+> navigation and exact-file write checks; missing or malformed fields are rejected. Do not
+> broaden permissions to work around a rejected request.
 
-To add the separate write fallback, replace the Step 4 parser with:
+Replace the session try-with-resources block inside the client block with these artifact
+capture, run, and verification statements. Keep the one-URL parser unchanged:
 
+<!-- code-id: 09-interactive-html-report-java-2 -->
 ```java
-private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
-private static final String LOCAL_DEMO_WRITE_FLAG = "--allow-local-demo-write";
-
-private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-    boolean allowLocalDemoMcp = false;
-    boolean allowLocalDemoWrite = false;
-    String target = null;
-    for (String arg : args) {
-        if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-            if (allowLocalDemoMcp) {
-                throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-            }
-            allowLocalDemoMcp = true;
-            continue;
-        }
-        if (LOCAL_DEMO_WRITE_FLAG.equals(arg)) {
-            if (allowLocalDemoWrite) {
-                throw new IllegalArgumentException("Specify " + LOCAL_DEMO_WRITE_FLAG + " at most once.");
-            }
-            allowLocalDemoWrite = true;
-            continue;
-        }
-        if (target == null) {
-            target = arg;
-        } else {
-            throw new IllegalArgumentException(usage());
-        }
-    }
-    if (target == null) {
-        throw new IllegalArgumentException(usage());
-    }
-    return new RunOptions(parseTarget(target), allowLocalDemoMcp, allowLocalDemoWrite);
+var artifact = ArtifactVerifier.captureArtifactState(
+        workingDirectory, "accessibility-report.html");
+try (var session = client.createSession(config).get()) {
+    ResponseStreamer.sendAndPrint(session, reportPrompt(target));
 }
-
-private record RunOptions(URI target, boolean allowLocalDemoMcp, boolean allowLocalDemoWrite) {
-}
+ArtifactVerifier.verifyArtifactUpdate(artifact);
+System.out.println("Verified a new or changed accessibility-report.html. Review its source and accessibility before use.");
 ```
 
-Extend the existing `setAvailableTools` call and permission callback:
+In the existing configuration chain, replace its available-tools list and permission callback
+with the following settings. Keep the MCP server and any selected model. Retain the imports of
+`PermissionRequestResult` and `CompletableFuture` from earlier steps. Use the same working directory
+in the configuration and artifact capture:
 
+<!-- code-id: 09-interactive-html-report-java-3 -->
 ```java
+.setWorkingDirectory(workingDirectory.toString())
 .setAvailableTools(List.of(
         "accessibility_rule_lookup",
         "read_latest_accessibility_snapshot",
         "playwright-browser_navigate",
         "builtin:apply_patch"))
-// Keep the existing MCP server configuration.
-.setOnPermissionRequest((request, ignored) -> {
-    if ("mcp".equals(request.getKind())
-            && isExactNavigation(request.getExtensionData(), target)) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
-    }
-    if ("write".equals(request.getKind())
+// Keep the existing MCP server configuration and any selected model.
+.setOnPermissionRequest((request, invocation) -> {
+    if (request != null && "write".equals(request.getKind())
+            && !Boolean.TRUE.equals(request.getManagedApprovalRequired())
             && isReportWrite(request.getExtensionData(), workingDirectory)) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
+        return CompletableFuture.completedFuture(PermissionRequestResult.approveOnce());
     }
-    if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
-    }
-    if (options.allowLocalDemoWrite() && "write".equals(request.getKind())) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
-    }
-    return java.util.concurrent.CompletableFuture.completedFuture(
-            PermissionRequestResult.reject(
-                    "This workshop allows only exact target navigation and writing accessibility-report.html. "
-                            + "Requests without target or path data remain denied unless the explicit "
-                            + "local-demo fallback for that permission kind is enabled."));
+    return WorkshopPermissionHandler.createForTarget(target).handle(request, invocation);
 })
 ```
 
 Replace `reportPrompt`:
 
+<!-- code-id: 09-interactive-html-report-java-4 -->
 ```java
 private static String reportPrompt(URI target) {
     return """
@@ -521,12 +664,13 @@ cargo run -- "{{TARGET_APP_URL}}"
 :::
 :::language java
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp --allow-local-demo-write {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 :::
 
 Use the workshop target:
 
+<!-- code-id: 09-interactive-html-report-shared-1 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -541,16 +685,16 @@ count update.
 
 | Symptom | Fix |
 |---|---|
-| The write is rejected | The default handler requires the exact `accessibility-report.html` path. If Java SDK payload fields are unavailable, use `--allow-local-demo-write` only for the controlled local demo; it approves the `write` kind but cannot prove the path. |
-| More than one file is requested | Keep only `builtin:apply_patch` in the new built-in capability. The default handler rejects other paths; the Java local-demo write fallback cannot make that guarantee. |
+| The write is rejected | Keep the exact output path and inspect the request; do not broaden permissions to force a successful run. |
+| More than one file is requested | The strict handler rejects other paths. A rejected batch can prevent all writes, so check the verified artifact result. |
 | The filter does not work | The generated document must include embedded JavaScript that filters cards and updates its live result count. Rerun once if the agent omitted a required element. |
 | The report loads without styling | Keep CSS and JavaScript embedded in the one HTML file; the prompt intentionally disallows external assets and libraries. |
 
 </details>
 
 > **The extension is complete when:** `accessibility-report.html` opens locally and
-> filters evidence-grounded findings. With the default exact handler, the session approves no other
-> file path; the Java local-demo write fallback deliberately cannot make that guarantee.
+> filters evidence-grounded findings after the application verifies an update. The strict handler
+> approves no other model-requested output path; a generated file still requires human review.
 
 ## Check your understanding
 
@@ -562,8 +706,8 @@ Why is allowing one named built-in write tool safer than broadly approving files
 `builtin:apply_patch` exposes only the required editing capability, and the default permission
 callback binds that capability to one normalized output path. The model cannot use shell commands
 or write another file, while the existing local tools and scoped Playwright navigation remain
-unchanged. The Java local-demo fallback is an explicit exception while the SDK omits permission
-payload fields, so it must remain limited to a controlled local target.
+unchanged. A model's completion message does not establish that the requested file was updated;
+the application checks that separately.
 
 </details>
 

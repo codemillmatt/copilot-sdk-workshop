@@ -53,6 +53,8 @@ validate_dotnet() {
             dotnet test "$project" --no-build --nologo --verbosity quiet
         fi
     done
+    dotnet run --project scripts/tests/dotnet/WorkshopChecks.csproj --verbosity quiet
+    node scripts/replay-workshop.js dotnet
 }
 
 validate_nodejs() {
@@ -65,6 +67,8 @@ validate_nodejs() {
             npm test --if-present
         )
     done
+    (cd start-museum/nodejs && node --import tsx --test ../../scripts/tests/nodejs/workshop.test.mjs)
+    node scripts/replay-workshop.js nodejs
 }
 
 validate_python() {
@@ -80,7 +84,7 @@ validate_python() {
         echo "Installing and smoke-checking $project"
         (
             cd "$project"
-            "$venv_python" -m pip install --disable-pip-version-check --no-input --requirement requirements.txt
+            "$venv_python" -m pip install --quiet --disable-pip-version-check --no-input --requirement requirements.txt
             "$venv_python" -m py_compile *.py
             "$venv_python" -c "import importlib, pathlib; [importlib.import_module(path.stem) for path in pathlib.Path('.').glob('*.py')]; from copilot import CopilotClient"
             if [[ -d tests ]]; then
@@ -88,6 +92,8 @@ validate_python() {
             fi
         )
     done
+    "$venv_python" scripts/tests/python/test_workshop.py
+    WORKSHOP_PYTHON="$venv_python" node scripts/replay-workshop.js python
 }
 
 validate_go() {
@@ -101,29 +107,36 @@ validate_go() {
             (cd "$project" && go test -mod=readonly ./...)
         fi
     done
+    bash scripts/tests/go/run.sh
+    node scripts/replay-workshop.js go
 }
 
 validate_rust() {
-    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$repo_root/.cargo-target}"
     for project in start-accessibility/rust start-museum/rust finished/rust/*; do
         echo "Checking $project"
-        (cd "$project" && cargo check --locked)
+        rust_target="$temporary_directory/rust/$project"
+        (cd "$project" && cargo check --locked --quiet --target-dir "$rust_target")
         if [[ "$project" != "start-museum/rust" && "$project" != "finished/rust/museum-exhibit-studio" ]]; then
-            (cd "$project" && cargo test --locked)
+            (cd "$project" && cargo test --locked --quiet --target-dir "$rust_target")
         fi
     done
+    bash scripts/tests/rust/run.sh
+    node scripts/replay-workshop.js rust
 }
 
 validate_java() {
     for project in start-accessibility/java start-museum/java finished/java/*; do
         echo "Resolving and compiling $project"
-        (cd "$project" && mvn --batch-mode --no-transfer-progress dependency:go-offline compile)
+        (cd "$project" && mvn --quiet --batch-mode --no-transfer-progress dependency:go-offline compile)
         if [[ "$project" == "start-museum/java" || "$project" == "finished/java/museum-exhibit-studio" ]]; then
-            (cd "$project" && mvn --batch-mode --no-transfer-progress --offline compile)
+            (cd "$project" && mvn --quiet --batch-mode --no-transfer-progress --offline compile)
         else
-            (cd "$project" && mvn --batch-mode --no-transfer-progress --offline test)
+            (cd "$project" && mvn --quiet --batch-mode --no-transfer-progress --offline test)
         fi
     done
+    bash scripts/tests/java/run.sh starter
+    bash scripts/tests/java/run.sh finished
+    node scripts/replay-workshop.js java
 }
 
 case "$target" in

@@ -1,65 +1,243 @@
-# Museum Exhibit Studio: Preflight
+# Museum Exhibit Studio: meet the project and prepare
 
-> **Time:** Untimed  
-> **Workshop:** Non-SDLC agent
+> **Pace:** Self-paced
 
 ## What you'll build
 
-Museum Exhibit Studio turns educator-approved facts into visitor-ready exhibit copy:
+Build an exhibit description drafting tool for a museum educator.
+They select approved facts. The curator agent drafts a title, a short narrative, and three visitor questions.
+The application checks the format. The educator reviews every claim.
 
-```text
-approved facts -> bounded prompt -> curator session -> structural checks -> human review
+The curator agent you'll build uses a large language model to draft museum text.
+The GitHub Copilot SDK connects your application to the Copilot CLI harness.
+You will write the code that configures the agent and checks its results.
+
+You will grow one console application: first a response, then streaming, instructions, facts, checks, and separate research.
+The optional final step creates a local HTML page.
+Research notes never become approved facts automatically.
+
+## Check what is already installed
+
+Run the checks for your selected language before installing anything.
+Keep a compatible installation if you already have one.
+Other runtimes can remain on your machine.
+
+:::language dotnet
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | Builds and runs the C# application | `dotnet --version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the Wikipedia MCP server in Step 7 | `node --version`, `npm --version`, `npx --version` |
+:::
+:::language nodejs
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the TypeScript application and Wikipedia MCP server | `node --version` |
+| npm and npx | Install packages and run the Wikipedia tool package | `npm --version`, `npx --version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+:::
+:::language python
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [Python 3.11 or newer](https://www.python.org/downloads/) | Runs the Python application | `python3 --version` or `py -3 --version` |
+| pip and `venv` | Create an isolated environment and install packages | `python3 -m pip --version` or `py -3 -m pip --version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the Wikipedia MCP server in Step 7 | `node --version`, `npm --version`, `npx --version` |
+:::
+:::language go
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [Go 1.24 or newer](https://go.dev/doc/install) | Builds and runs the Go application | `go version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the Wikipedia MCP server in Step 7 | `node --version`, `npm --version`, `npx --version` |
+:::
+:::language rust
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [Rust 1.94 or newer](https://www.rust-lang.org/tools/install) | Builds the Rust application | `rustc --version` |
+| Cargo | Downloads dependencies and runs the application | `cargo --version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the Wikipedia MCP server in Step 7 | `node --version`, `npm --version`, `npx --version` |
+:::
+:::language java
+| Requirement | Why the workshop needs it | Check |
+|---|---|---|
+| [Java Development Kit 17 or newer](https://adoptium.net/installation/) | Compiles and runs the Java application | `java -version` |
+| [Apache Maven 3.9 or newer](https://maven.apache.org/install.html) | Downloads dependencies and builds the project | `mvn --version` |
+| [Git](https://git-scm.com/downloads) | Downloads the repository and tracks changes | `git --version` |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | Supplies the Copilot CLI harness used by the SDK | `copilot --version` |
+| [Node.js 22.12 or newer](https://nodejs.org/en/download) | Runs the Wikipedia MCP server in Step 7 | `node --version`, `npm --version`, `npx --version` |
+:::
+
+The version output can include additional patch information.
+For example, Node.js `v22.12.1` satisfies the `22.12 or newer` requirement.
+
+<details>
+<summary>Install the selected language tools</summary>
+
+:::language dotnet
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+Install the SDK, not only the .NET Runtime.
+:::
+
+:::language nodejs
+Install [Node.js 22.12 or newer](https://nodejs.org/en/download).
+The standard installer includes npm and npx.
+:::
+
+:::language python
+Install [Python 3.11 or newer](https://www.python.org/downloads/).
+Select the option that adds Python to your command path when the installer provides one.
+Python includes the `venv` module and normally includes pip.
+:::
+
+:::language go
+Install [Go 1.24 or newer](https://go.dev/doc/install).
+The installation includes the compiler and the `go` command.
+:::
+
+:::language rust
+Install Rust with [rustup](https://www.rust-lang.org/tools/install).
+It installs `rustc` and Cargo.
+:::
+
+:::language java
+Install a [Java Development Kit 17 or newer](https://adoptium.net/installation/).
+Install [Apache Maven 3.9 or newer](https://maven.apache.org/install.html).
+Run `mvn --version` afterward and check that it reports the intended JDK.
+:::
+
+</details>
+
+<details>
+<summary>Install Git and Copilot CLI</summary>
+
+Install [Git](https://git-scm.com/downloads).
+
+Install the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli).
+The Copilot CLI supplies the harness used by the GitHub Copilot SDK.
+Reopen the terminal if `copilot --version` is not found after installation.
+
+You need a GitHub account with Copilot CLI access.
+Your organisation may need to enable that access.
+
+Run:
+
+```bash
+copilot login
 ```
 
-You build one growing console application in place, inside `start-museum/<language>`. Each
-step adds one idea and ends with a real run, so the curator comes together in front of you:
+Follow the sign-in instructions.
+Use the account that has Copilot CLI access.
 
-| Step | You add | You see |
-|---|---|---|
-| 1 | A client, a session, one prompt | Museum copy in your terminal |
-| 2 | The pre-built streaming printer | Text arriving live |
-| 3 | The curator system message | A different voice and shape |
-| 4 | The approved-fact prompt builder | Copy that tracks your facts |
-| 5 | One session runner with the guardrails | Refused tools and friendly failures |
-| 6 | The pre-built validator | A PASS/FAIL structural report |
-| 7 | A scoped Wikipedia research session | Cited background, kept out of the exhibit |
-| 8 | An optional interactive page | `exhibit.html` in your browser |
+</details>
 
-The starter already ships the plumbing you should never have to write: the approved fact sets and
-their bounds, a streaming printer, deterministic exhibit validation, the scoped Wikipedia MCP server
-with its deny-by-default permission handler, the single-file `exhibit.html` write permission, and
-small terminal prompts. **You never edit the helper module.** You write the session setup, the two
-system messages, the prompt builders, one session runner, and `main`.
+<details>
+<summary>Install Node.js for Wikipedia research</summary>
 
-You need an authenticated GitHub Copilot CLI, your language runtime, and a terminal. You work
-directly in the minimal project under `start-museum/<language>`, not the finished app. The completed
-project under `finished/<language>/museum-exhibit-studio` is optional reference material only.
+Step 7 connects the curator agent to Wikipedia tools through **Model Context Protocol (MCP)**.
+Those tools run in a separate Node.js process.
+
+Install [Node.js 22.12 or newer](https://nodejs.org/en/download) if the check does not meet the requirement.
+The standard installer includes npm and npx.
+
+:::language nodejs
+The same Node.js installation runs the workshop application and the Wikipedia tool program.
+:::
+
+:::language dotnet
+Your application still runs on .NET. Node.js runs only the Wikipedia tool program.
+:::
+
+:::language python
+Your application still runs on Python. Node.js runs only the Wikipedia tool program.
+:::
+
+:::language go
+Your application still runs on Go. Node.js runs only the Wikipedia tool program.
+:::
+
+:::language rust
+Your application still runs on Rust. Node.js runs only the Wikipedia tool program.
+:::
+
+:::language java
+Your application still runs on Java. Node.js runs only the Wikipedia tool program.
+:::
+
+Check access to the pinned package:
+
+```bash
+npm view wikipedia-mcp@1.0.3 version
+```
+
+The command should print `1.0.3`.
+It does not start a server or send a model request.
+
+</details>
+
+<details>
+<summary>Troubleshoot the prerequisite checks</summary>
+
+| Symptom | What to do |
+|---|---|
+| A command is not found | Complete the matching installation section, then reopen the terminal. |
+| The version is too old | Install a supported version, then reopen the terminal. |
+| `copilot login` cannot use your account | Check Copilot CLI access or contact your organisation administrator. |
+| npm cannot read the Wikipedia package metadata | Check network and proxy access. Do not change the pinned package version. |
+| More than one runtime is installed | That is allowed. Check which version this terminal uses. |
+
+</details>
+
+Prompts and tool results can reach the configured model service and consume account usage.
+Use public sample facts. Do not enter credentials or private museum material.
+
+## What the starter provides
+
+This workshop contains a starter application. The starter supplies fact sets, a fact tool, terminal questions, streaming output, validators, and scoped permission helpers.
+These are application code provided for this workshop, not automatic SDK features.
+You write the instructions, prompts, session settings, and code connecting them.
+Keep the supplied helpers unchanged.
 
 ## Clone the workshop repository
+
+Open a terminal in the folder where you keep projects.
+The following commands create a `copilot-sdk-workshop` folder and enter it.
+If you already cloned this repository, use that copy instead of cloning inside it.
 
 ```bash
 git clone https://github.com/jamesmontemagno/copilot-sdk-workshop.git
 cd copilot-sdk-workshop
 ```
 
-Confirm the terminal is at the repository root before you change into a starter:
+Check that the terminal is at the repository root before you enter a starter:
 
-```bash
-test "$(git rev-parse --show-toplevel)" = "$PWD"
+<!-- code-id: museum-00-preflight-shared-3 -->
+```text
+git rev-parse --show-toplevel
 ```
 
-The command must exit successfully without output.
+The printed path must be the `copilot-sdk-workshop` directory you just entered.
 
-You build the museum application **in place**, inside the starter directory for your language.
-There is no copy step. That means you are editing tracked repository files, so your work shows up in
-`git status` as modified files. That is expected and correct. If you want to start over from a clean
-starter, run `git checkout -- .` from the repository root to discard your edits.
+You will edit the starter inside this repository.
+Use `git status` to see your changes.
+Keep one working copy for this track through every lesson.
 
-Change into your language's starter directory now and stay there for every command in the museum
-workshop.
+## Build and open your starter
+
+Run the commands for your selected language from the repository root.
+The first command enters the folder where you will work for the rest of the workshop.
+Use the shell tabs where command paths differ.
 
 :::language dotnet
-Change into the .NET starter, then restore, build, and run its local entrypoint:
+Enter the .NET starter with the first command.
+`dotnet restore` downloads the pinned packages.
+The next two commands build the application and run it without another build:
 
 ```bash
 cd start-museum/dotnet
@@ -68,19 +246,25 @@ dotnet build --no-restore
 dotnet run --no-build
 ```
 
-Pass condition: the build succeeds and the program prints `=== Museum Exhibit Studio starter ===`
-followed by `Pre-built curator helpers are ready in Helpers/.`
+The build must succeed.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies the helpers in `Helpers/`.
 
-You work in `start-museum/dotnet` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
+Keep the terminal in `start-museum/dotnet`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-Your helper module is `Helpers/Curator*.cs` in the `MuseumExhibitStudio.Helpers` namespace. You
-will write every lesson change in `Program.cs`.
+You edit `Program.cs`, the entrypoint.
+The supplied `Helpers/Curator*.cs` files belong to the `MuseumExhibitStudio.Helpers` namespace.
+That namespace groups their names for use in your code.
 :::
 
 :::language nodejs
-Change into the Node.js starter. Its lockfile preserves SDK 1.0.11 and
-the compatible `@github/copilot` 1.0.80 platform package:
+Enter the Node.js starter with the first command.
+`npm ci` installs the versions recorded in `package-lock.json`, called the **lockfile**.
+Keep it unchanged so your dependencies match the examples.
+
+`npm run build` checks the TypeScript source.
+`npm start` runs the starter.
+The package settings select these commands for you:
 
 ```bash
 cd start-museum/nodejs
@@ -89,39 +273,62 @@ npm run build
 npm start
 ```
 
-Pass condition: the build succeeds and the program prints `=== Museum Exhibit Studio starter ===`
-followed by `Pre-built curator helpers are ready in src/curator.ts.`
+The build must succeed.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies `src/curator.ts` as its helper module.
 
-You work in `start-museum/nodejs` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
+Keep the terminal in `start-museum/nodejs`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-Your helper module is `src/curator.ts`. You will write every lesson change in `src/index.ts`.
+You edit `src/index.ts`, the entrypoint.
+Keep the supplied functions in `src/curator.ts` unchanged.
+The lockfile pins Copilot SDK 1.0.11 and its compatible `@github/copilot` 1.0.80 package.
 :::
 
 :::language python
-Change into the Python starter, create an isolated virtual environment, and install SDK 1.0.11:
+Enter the Python starter with the first command in your shell's tab.
+The second command creates `.venv`, the project's virtual environment.
+Its Python interpreter runs every following command, so no activation step is needed.
 
-```bash
-cd start-museum/python
+The package installation uses the versions in `requirements.txt`, including Copilot SDK 1.0.11.
+The compile command checks syntax. The final command runs the starter:
+
+<div class="workshop-tabs" data-tabs>
+  <div role="tablist" aria-label="Prepare the Python museum starter">
+    <button type="button" role="tab" aria-selected="true" data-tab="museum-python-windows">PowerShell</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="museum-python-unix">Bash</button>
+  </div>
+  <div role="tabpanel" data-panel="museum-python-windows">
+    <pre><code class="language-powershell">cd start-museum/python
+py -3 -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+.venv/Scripts/python.exe -m py_compile main.py curator.py
+.venv/Scripts/python.exe main.py</code></pre>
+  </div>
+  <div role="tabpanel" data-panel="museum-python-unix" hidden>
+    <pre><code class="language-bash">cd start-museum/python
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m py_compile *.py
-.venv/bin/python main.py
-```
+.venv/bin/python -m py_compile main.py curator.py
+.venv/bin/python main.py</code></pre>
+  </div>
+</div>
 
-On Windows, the interpreter lives at `.venv/Scripts/python.exe`.
+The syntax check must succeed.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies `curator.py` as its helper module.
 
-Pass condition: the source compiles and the program prints `=== Museum Exhibit Studio starter ===`
-followed by `Pre-built curator helpers are ready in curator.py.`
+Keep the terminal in `start-museum/python`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-You work in `start-museum/python` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
-
-Your helper module is `curator.py`. You will write every lesson change in `main.py`.
+You edit `main.py`, the entrypoint.
+Keep the supplied functions in `curator.py` unchanged.
+Use the `.venv` interpreter shown in your shell's tab for later runs too.
 :::
 
 :::language go
-Change into the Go starter, download the locked SDK 1.0.11 dependency, and build it:
+Enter the Go starter with the first command.
+`go mod download` retrieves its pinned dependencies, including Copilot SDK 1.0.11.
+`go build` checks and compiles the project without changing its module requirements.
+`go run .` runs the whole package, including its supplied helper file:
 
 ```bash
 cd start-museum/go
@@ -130,18 +337,22 @@ go build -mod=readonly ./...
 go run .
 ```
 
-Pass condition: the build succeeds and the program prints `=== Museum Exhibit Studio starter ===`
-followed by `Pre-built curator helpers are ready in curator.go.`
+The build must succeed.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies `curator.go` as its helper file.
 
-You work in `start-museum/go` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
+Keep the terminal in `start-museum/go`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-Your helper module is `curator.go`, in the same `main` package. You will write every lesson
-change in `main.go`.
+You edit `main.go`, the entrypoint.
+`curator.go` is in the same `main` package, so its functions need no import.
+Keep that helper file unchanged.
 :::
 
 :::language rust
-Change into the Rust starter, fetch locked dependencies, and check it:
+Enter the Rust starter with the first command.
+`cargo fetch --locked` downloads the versions in `Cargo.lock`.
+`cargo check --locked` checks the code against those dependencies.
+`cargo run --locked` builds and runs the starter:
 
 ```bash
 cd start-museum/rust
@@ -150,19 +361,21 @@ cargo check --locked
 cargo run --locked
 ```
 
-Pass condition: Cargo leaves `Cargo.lock` unchanged and the program prints
-`=== Museum Exhibit Studio starter ===` followed by
-`Pre-built curator helpers are ready in src/lib.rs.`
+Cargo must leave `Cargo.lock` unchanged.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies `src/lib.rs` as its helper module.
 
-You work in `start-museum/rust` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
+Keep the terminal in `start-museum/rust`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-Your helper module is the `museum_exhibit_studio` library crate in `src/lib.rs`. You will write
-every lesson change in `src/main.rs`.
+You edit `src/main.rs`, the entrypoint.
+`src/lib.rs` defines the supplied `museum_exhibit_studio` library crate, a module your entrypoint imports.
+Keep that helper file unchanged.
 :::
 
 :::language java
-Change into the Maven starter, resolve SDK 1.0.11, compile, and run it:
+Enter the Java starter with the first command.
+Maven reads `pom.xml` to download dependencies, including Copilot SDK 1.0.11.
+The next commands compile the source and run its configured main class:
 
 ```bash
 cd start-museum/java
@@ -171,72 +384,40 @@ mvn compile
 mvn exec:java
 ```
 
-Pass condition: Maven succeeds and the program prints `=== Museum Exhibit Studio starter ===`
-followed by `Pre-built curator helpers are ready in src/main/java/workshop/.`
+Maven must finish successfully.
+The program prints `=== Museum Exhibit Studio starter ===` and identifies the helper folder `src/main/java/workshop/`.
 
-You work in `start-museum/java` for the rest of the workshop, so keep this terminal here. From
-this folder, enter `code .` to open it in VS Code, or open the folder in your favorite editor.
+Keep the terminal in `start-museum/java`.
+Open that same folder in your editor. For VS Code, enter `code .` if its command is installed.
 
-Your helper module is `src/main/java/workshop/Curator*.java`. You will write every lesson change
-in `src/main/java/workshop/MuseumExhibitStudio.java`.
+You edit `src/main/java/workshop/MuseumExhibitStudio.java`, the entrypoint.
+The `Curator*.java` files beside it contain the supplied helpers.
+They share the `workshop` package. Keep them unchanged.
 :::
 
-## Establish the trust boundary
+## Ready for Step 1
 
-| Control | What it can do |
-|---|---|
-| System message | Guide role, tone, scope, and output shape |
-| Tool allowlist | Decide exactly which tools exist for a session |
-| Application code | Own the data behind a tool, and enforce limits, timeout, validation, and cleanup |
-| Human review | Decide whether every historical claim is supported |
+Continue when the starter builds, its welcome message appears, and Copilot CLI is signed in.
+The starter makes no model request. Step 1 will check that connection.
+Keep your editor and terminal in the selected starter folder.
 
-The educator's approved facts are the only approved source, and the curator reaches them through
-one application-owned tool. Model memory is not verified museum knowledge, and prompt guidance is
-not an authorization boundary: only the allowlist and the permission handler decide what the
-session may actually do.
+If a command is missing, reopen the terminal after installation.
+For package errors, check network access before changing pinned versions.
+
+<details>
+<summary>Recover without losing your work</summary>
+
+Run one application instance per starter directory.
+Inspect `git status --short` and `git diff` before restoring anything.
+Back up edited and untracked files outside the repository and check the backup.
+To restore one tracked file, use `git restore --source=HEAD -- <exact-file-path>` from the repository root.
+Replace the placeholder with its exact path. This discards only that file's edits.
+Do not restore whole directories or delete untracked work.
+
+</details>
 
 ## Learn more
 
-The SDK behind the curator is documented outside this workshop. These pages are worth having open
-alongside it.
-
-- [GitHub Copilot SDK how-tos](https://docs.github.com/en/copilot/how-tos/copilot-sdk): GitHub's
-  own SDK documentation, including the prerequisites this preflight covers.
-- [Copilot SDK documentation map](https://github.com/github/copilot-sdk/blob/main/docs/README.md):
-  the index for setup, authentication, features, and troubleshooting.
-- [Default setup: the bundled CLI](https://github.com/github/copilot-sdk/blob/main/docs/setup/bundled-cli.md):
-  how the SDK locates and starts the Copilot CLI, and how to point it at a different binary.
-- [Debugging guide](https://github.com/github/copilot-sdk/blob/main/docs/troubleshooting/debugging.md):
-  the first place to look when a run fails before it produces any output.
-
-:::language dotnet
-- [.NET SDK reference](https://github.com/github/copilot-sdk/blob/main/dotnet/README.md):
-  package installation and a minimal example for the .NET SDK.
-:::
-
-:::language nodejs
-- [Node.js SDK reference](https://github.com/github/copilot-sdk/blob/main/nodejs/README.md):
-  package installation and a minimal example for the Node.js SDK.
-:::
-
-:::language python
-- [Python SDK reference](https://github.com/github/copilot-sdk/blob/main/python/README.md):
-  package installation and a minimal example for the Python SDK.
-:::
-
-:::language go
-- [Go SDK reference](https://github.com/github/copilot-sdk/blob/main/go/README.md):
-  module installation and a minimal example for the Go SDK.
-:::
-
-:::language rust
-- [Rust SDK reference](https://github.com/github/copilot-sdk/blob/main/rust/README.md):
-  crate installation and a minimal example for the Rust SDK.
-:::
-
-:::language java
-- [Java SDK reference](https://github.com/github/copilot-sdk/blob/main/java/README.md):
-  dependency coordinates and a minimal example for the Java SDK.
-:::
+Optional reference: [Copilot SDK setup](https://github.com/github/copilot-sdk/blob/v1.0.11/docs/README.md).
 
 Continue to [Your first curator session](museum-01-first-curator-session.md).

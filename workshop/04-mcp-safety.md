@@ -1,6 +1,6 @@
 # Step 4: Connect an external tool safely
 
-> **Time:** 20 minutes
+> **Pace:** Self-paced
 
 ## What you'll connect
 
@@ -15,9 +15,13 @@ application. In this workshop, the SDK starts the Playwright MCP server as a sep
 process. Playwright handles browser automation, while your application configures the connection.
 
 The process boundary is also a **trust boundary**. A
-[permission handler](https://github.com/github/copilot-sdk/blob/main/docs/hooks/pre-tool-use.md) is
+**permission handler** is
 a callback the runtime invokes before a requested action runs, and it decides whether each external
 action may proceed.
+
+This permission callback answers authorization requests. It is a different SDK surface from a
+pre-tool-use hook, which can inspect a tool call. Do not confuse the hook examples in reference
+material with the permission handler configured in this lesson.
 
 | Question | Local WCAG tool | Playwright MCP |
 |---|---|---|
@@ -28,6 +32,15 @@ action may proceed.
 
 The WCAG lookup and narrow snapshot reader stay in process.
 `CopilotSession -> Playwright MCP -> browser` crosses a process boundary.
+
+Tool lists and permission callbacks restrict what the model can request through the SDK.
+They do not sandbox the MCP server's operating-system access. Use the pinned, trusted server
+and public target; the server itself owns its browser process and snapshot writes.
+
+An **accessibility tree** describes the roles, names, and relationships a browser exposes to
+assistive technology. A snapshot is a text representation of that tree at one point in time.
+It is useful evidence for an unnamed textbox or heading structure, but it does not by itself
+establish visual contrast, keyboard behavior, or overall WCAG conformance.
 
 ## Put Playwright behind guardrails
 
@@ -49,6 +62,9 @@ files, and snapshots larger than 1 MB. Navigation is approved only when the comp
 matches the target supplied at startup. Scheme and host use URL-standard case-insensitive
 comparison. Path, query, and fragment must match case-sensitively.
 
+<details>
+<summary>Reference: other permission decision kinds</summary>
+
 The handler returns exactly one decision per request, and this one needs two of the available
 kinds. `approve-once` allows this single request. `reject` denies it and can forward a feedback
 message to the model, so a refused call comes back with a reason instead of as a silent failure.
@@ -58,6 +74,13 @@ connected client can answer the request instead. Wider approval scopes — `appr
 `approve-for-location`, and `approve-permanently` — remember a decision beyond this one call. Each
 SDK spells all of these with its own naming convention.
 
+</details>
+
+For this lesson, predict only two decisions: exact-target navigation is approved once; a
+different target or missing URL is rejected. Keep this contract in mind while inspecting the
+supplied handler. The snapshot reader is supplied plumbing: it takes no path and returns only a
+bounded current-run snapshot. You do not need to reproduce its file-selection implementation.
+
 :::language dotnet
 ## Wire up scoped Playwright access in C#
 
@@ -65,6 +88,7 @@ SDK spells all of these with its own naming convention.
 
 At the top of `Program.cs`, after the `using` statements and before the banner, insert:
 
+<!-- code-id: 04-mcp-safety-dotnet-1 -->
 ```csharp
 if (args.Length is not 1 ||
     !Uri.TryCreate(args[0], UriKind.Absolute, out var targetUri) ||
@@ -80,6 +104,7 @@ if (args.Length is not 1 ||
 Open `Helpers/WorkshopPermissionHandler.cs`. The prebuilt handler returns a one-time
 approval only for exact-target navigation. Every other external request is rejected.
 
+<!-- code-id: 04-mcp-safety-dotnet-2 -->
 ```csharp
 public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> CreateForTarget(
     Uri allowedTarget)
@@ -90,7 +115,7 @@ public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecis
     {
         var decision = request switch
         {
-            PermissionRequestMcp { ServerName: "playwright" } navigation
+            PermissionRequestMcp { ServerName: "playwright", ManagedApprovalRequired: not true } navigation
                 when IsPlaywrightTool(navigation, "browser_navigate") &&
                      IsNavigationToTarget(navigation.Args, allowedTarget) =>
                 PermissionDecision.ApproveOnce(),
@@ -107,9 +132,9 @@ The .NET SDK currently prefixes MCP permission tool names with the server name (
 `playwright-browser_navigate`), while MCP configuration uses `browser_navigate`.
 `IsPlaywrightTool` accepts those two exact forms rather than using a broad wildcard.
 
-> **SDK note:** version 1.0.7 ships `PermissionHandler.ApproveAll`, but no built-in scoped handler.
-> The starter therefore includes a hand-written delegate. `PermissionDecision` is currently marked
-> evaluation-only, so that one helper contains a localized `GHCP001` suppression.
+> **SDK note:** the pinned SDK 1.0.11 provides typed permission requests and decisions. The supplied
+> delegate implements this application's exact-target policy. Its evaluation-only decision API
+> has a localized `GHCP001` opt-in; the handler still rejects unknown or malformed requests.
 
 ### 3. Inspect the prebuilt snapshot-reader boundary
 
@@ -117,6 +142,7 @@ Open `Helpers/PlaywrightSnapshotReader.cs`. The reader captures existing snapsho
 the tool is created, accepts no model-supplied arguments, selects only a new direct child named
 `page-*.yml`, rejects symbolic links and oversized files, then returns the text.
 
+<!-- code-id: 04-mcp-safety-dotnet-3 -->
 ```csharp
 public static AIFunction CreateTool(string workingDirectory)
 {
@@ -145,13 +171,16 @@ implemented by the application. That is a narrower capability than a general fil
 
 ### 4. Add Playwright MCP and scoped permissions
 
-Replace the session configuration with:
+Replace the entire previous session-creation statement with this configuration and session setup.
+Keep the same `workingDirectory` in the session, snapshot reader, and MCP server:
 
+<!-- code-id: 04-mcp-safety-dotnet-4 -->
 ```csharp
 var workingDirectory = Directory.GetCurrentDirectory();
 
-await using var session = await client.CreateSessionAsync(new SessionConfig
+var config = new SessionConfig
 {
+    WorkingDirectory = workingDirectory,
     Streaming = true,
     OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),
     Tools =
@@ -175,13 +204,16 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
             Tools = ["browser_navigate"]
         }
     }
-});
+};
+
+await using var session = await client.CreateSessionAsync(config);
 ```
 
 ### 5. Request browser evidence
 
 Replace the final send call:
 
+<!-- code-id: 04-mcp-safety-dotnet-5 -->
 ```csharp
 Console.WriteLine($"\nInspecting: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(
@@ -203,6 +235,7 @@ The first run may take longer while `npx` starts Playwright.
 
 Look for:
 
+<!-- code-id: 04-mcp-safety-dotnet-6 -->
 ```text
 [tool:start] playwright-browser_navigate
 [tool:done] success=...
@@ -230,6 +263,7 @@ Page title: Blazor Accessibility Target
 
 Compare your work with this complete Step 4 implementation.
 
+<!-- code-id: 04-mcp-safety-dotnet-7 -->
 ```csharp
 using GitHub.Copilot;
 using HelloCopilotSDK.Helpers;
@@ -252,8 +286,9 @@ Console.WriteLine($"Connected to the Copilot runtime: {ping.Message}\n");
 
 var workingDirectory = Directory.GetCurrentDirectory();
 
-await using var session = await client.CreateSessionAsync(new SessionConfig
+var config = new SessionConfig
 {
+    WorkingDirectory = workingDirectory,
     Streaming = true,
     OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),
     Tools =
@@ -277,7 +312,9 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
             Tools = ["browser_navigate"]
         }
     }
-});
+};
+
+await using var session = await client.CreateSessionAsync(config);
 
 Console.WriteLine($"Inspecting: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(
@@ -299,6 +336,7 @@ await ResponseStreamer.SendAndPrintAsync(
 
 At the top of `src/index.ts`, replace the entrypoint setup with:
 
+<!-- code-id: 04-mcp-safety-nodejs-1 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import {
@@ -320,6 +358,7 @@ if (!["http:", "https:"].includes(target.protocol)) {
 
 Open `src/workshop.ts`. The prebuilt handler approves only exact-target Playwright navigation:
 
+<!-- code-id: 04-mcp-safety-nodejs-2 -->
 ```typescript
 export function permissionForTarget(target: URL): PermissionHandler {
   return (request) => {
@@ -328,7 +367,8 @@ export function permissionForTarget(target: URL): PermissionHandler {
       request.serverName === "playwright" &&
       (request.toolName === "browser_navigate" ||
         request.toolName === "playwright-browser_navigate") &&
-      typeof request.args?.url === "string" &&
+      request.args !== null && typeof request.args === "object" && !Array.isArray(request.args) &&
+      typeof request.args.url === "string" && URL.canParse(request.args.url) &&
       sameUrl(new URL(request.args.url), target)
     ) {
       return { kind: "approve-once" };
@@ -363,6 +403,7 @@ server name on permission requests.
 Still in `src/workshop.ts`, the snapshot reader captures existing files at creation
 time and accepts no model-supplied path:
 
+<!-- code-id: 04-mcp-safety-nodejs-3 -->
 ```typescript
 export function createSnapshotReader(workingDirectory: string) {
   const outputDirectory = resolve(workingDirectory, ".playwright-mcp");
@@ -408,11 +449,13 @@ export function createSnapshotReader(workingDirectory: string) {
 
 In `src/index.ts`, create the session with the three-tool allowlist and Playwright MCP:
 
+<!-- code-id: 04-mcp-safety-nodejs-4 -->
 ```typescript
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true,
     onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
@@ -456,6 +499,7 @@ The first run may take longer while `npx` starts Playwright.
 
 Look for:
 
+<!-- code-id: 04-mcp-safety-nodejs-5 -->
 ```text
 [tool:start] playwright-browser_navigate
 [tool:done] success=...
@@ -485,6 +529,7 @@ Compare your work with this complete Step 4 implementation.
 
 `src/index.ts`:
 
+<!-- code-id: 04-mcp-safety-nodejs-6 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, createSnapshotReader, permissionForTarget, streamResponse } from "./workshop.js";
@@ -494,9 +539,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true,
     onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
@@ -523,8 +569,11 @@ try {
 
 At the top of `main.py`, validate the startup URL:
 
+<!-- code-id: 04-mcp-safety-python-1 -->
 ```python
 import asyncio
+from pathlib import Path
+from copilot.session_events import ToolExecutionStartData, ToolExecutionCompleteData
 import sys
 from urllib.parse import urlsplit
 
@@ -555,6 +604,7 @@ async def main() -> None:
 
 Open `workshop.py`. The prebuilt handler approves only exact-target Playwright navigation:
 
+<!-- code-id: 04-mcp-safety-python-2 -->
 ```python
 def permission_for_target(target: str):
     def handler(request, _invocation):
@@ -605,6 +655,7 @@ def _same_url(requested: str, allowed: str) -> bool:
 Still in `workshop.py`, the snapshot reader captures existing files at creation time
 and accepts no model-supplied path:
 
+<!-- code-id: 04-mcp-safety-python-3 -->
 ```python
 def create_snapshot_reader(working_directory: str):
     output_directory = Path(working_directory, ".playwright-mcp").resolve()
@@ -645,9 +696,10 @@ def create_snapshot_reader(working_directory: str):
 
 Replace the session creation block in `main.py`:
 
+<!-- code-id: 04-mcp-safety-python-4 -->
 ```python
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(working_directory=str(Path.cwd()),
             streaming=True,
             on_permission_request=permission_for_target(target),
             tools=[accessibility_rule_lookup, create_snapshot_reader(".")],
@@ -675,20 +727,30 @@ Replace the session creation block in `main.py`:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
+                    case ToolExecutionStartData(tool_name=name):
+                        print(f"\n[tool:start] {name}")
+                    case ToolExecutionCompleteData(success=success):
+                        print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send(
-                f"Use browser_navigate to open {target}, then "
-                "read_latest_accessibility_snapshot and report the page title."
-            )
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(
+                        f"Use browser_navigate to open {target}, then "
+                        "read_latest_accessibility_snapshot and report the page title."
+                    )
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 ```
@@ -706,6 +768,7 @@ The first run may take longer while `npx` starts Playwright.
 
 Look for navigation and snapshot activity, then a page title such as:
 
+<!-- code-id: 04-mcp-safety-python-5 -->
 ```text
 Page title: Blazor Accessibility Target
 ```
@@ -730,8 +793,11 @@ Compare your work with this complete Step 4 implementation.
 
 `main.py`:
 
+<!-- code-id: 04-mcp-safety-python-6 -->
 ```python
 import asyncio
+from pathlib import Path
+from copilot.session_events import ToolExecutionStartData, ToolExecutionCompleteData
 import sys
 from urllib.parse import urlsplit
 
@@ -748,7 +814,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(working_directory=str(Path.cwd()),
             streaming=True,
             on_permission_request=permission_for_target(target),
             tools=[accessibility_rule_lookup, create_snapshot_reader(".")],
@@ -765,17 +831,27 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
+                    case ToolExecutionStartData(tool_name=name):
+                        print(f"\n[tool:start] {name}")
+                    case ToolExecutionCompleteData(success=success):
+                        print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send(f"Use browser_navigate to open {target}, then read_latest_accessibility_snapshot and report the page title.")
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(f"Use browser_navigate to open {target}, then read_latest_accessibility_snapshot and report the page title.")
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -792,12 +868,12 @@ if __name__ == "__main__":
 
 ### 1. Accept one controlled target
 
-At the start of `main` in `main.go`, validate the startup URL:
+At the start of `run` in `main.go`, validate the startup URL:
 
+<!-- code-id: 04-mcp-safety-go-1 -->
 ```go
 if len(os.Args) != 2 {
-	fmt.Fprintln(os.Stderr, "Usage: go run . <http-or-https-url>")
-	return
+	return fmt.Errorf("Usage: go run . <http-or-https-url>")
 }
 target := os.Args[1]
 if !strings.Contains(target, "://") {
@@ -805,8 +881,7 @@ if !strings.Contains(target, "://") {
 }
 parsed, err := url.ParseRequestURI(target)
 if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-	fmt.Fprintln(os.Stderr, "Enter an absolute HTTP or HTTPS URL.")
-	return
+	return fmt.Errorf("Enter an absolute HTTP or HTTPS URL.")
 }
 ```
 
@@ -814,6 +889,7 @@ if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme 
 
 Before `main`, add exact-URL matching and the permission handler:
 
+<!-- code-id: 04-mcp-safety-go-2 -->
 ```go
 func sameURL(requested, allowed string) bool {
 	left, leftErr := url.Parse(requested)
@@ -858,6 +934,7 @@ Accept both bare and prefixed Playwright tool names on the permission path.
 
 Still before `main`, add the no-argument snapshot reader:
 
+<!-- code-id: 04-mcp-safety-go-3 -->
 ```go
 const maxSnapshotBytes = 1_000_000
 
@@ -905,12 +982,15 @@ func snapshotReader(workingDirectory string) func(struct{}, copilot.ToolInvocati
 
 ### 4. Add Playwright MCP and scoped permissions
 
-In `main`, define both local tools and replace the session configuration:
+In `run`, define both local tools and replace the session configuration:
 
+Inside `run`, replace the existing lookup, client, session, and send section with the following block. Keep the URL validation above it and the final `return nil` afterward. The error-reporting `main` wrapper is unchanged.
+
+<!-- code-id: 04-mcp-safety-go-4 -->
 ```go
 workingDirectory, err := os.Getwd()
 if err != nil {
-	panic(err)
+	return err
 }
 lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 lookup.SkipPermission = true
@@ -918,10 +998,10 @@ readSnapshot := copilot.DefineTool("read_latest_accessibility_snapshot", "Reads 
 readSnapshot.SkipPermission = true
 
 client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+defer func() { err = errors.Join(err, client.Stop()) }()
 if err := client.Start(context.Background()); err != nil {
-	panic(err)
+	return err
 }
-defer client.Stop()
 session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 	Streaming:           copilot.Bool(true),
 	Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -937,11 +1017,11 @@ session, err := client.CreateSession(context.Background(), &copilot.SessionConfi
 	},
 })
 if err != nil {
-	panic(err)
+	return err
 }
-defer session.Disconnect()
+defer func() { err = errors.Join(err, session.Disconnect()) }()
 if err := streamResponse(session, fmt.Sprintf("Use browser_navigate to open %s, then read_latest_accessibility_snapshot and report the page title.", target)); err != nil {
-	panic(err)
+	return err
 }
 ```
 
@@ -958,6 +1038,7 @@ The first run may take longer while `npx` starts Playwright.
 
 Look for a page title such as:
 
+<!-- code-id: 04-mcp-safety-go-5 -->
 ```text
 Page title: Blazor Accessibility Target
 ```
@@ -982,10 +1063,11 @@ Compare your work with this complete Step 4 implementation.
 
 `main.go` session wiring:
 
+<!-- code-id: 04-mcp-safety-go-6 -->
 ```go
 workingDirectory, err := os.Getwd()
 if err != nil {
-	panic(err)
+	return err
 }
 lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 lookup.SkipPermission = true
@@ -993,10 +1075,10 @@ readSnapshot := copilot.DefineTool("read_latest_accessibility_snapshot", "Reads 
 readSnapshot.SkipPermission = true
 
 client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+defer func() { err = errors.Join(err, client.Stop()) }()
 if err := client.Start(context.Background()); err != nil {
-	panic(err)
+	return err
 }
-defer client.Stop()
 session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 	Streaming:           copilot.Bool(true),
 	Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -1012,11 +1094,11 @@ session, err := client.CreateSession(context.Background(), &copilot.SessionConfi
 	},
 })
 if err != nil {
-	panic(err)
+	return err
 }
-defer session.Disconnect()
+defer func() { err = errors.Join(err, session.Disconnect()) }()
 if err := streamResponse(session, fmt.Sprintf("Use browser_navigate to open %s, then read_latest_accessibility_snapshot and report the page title.", target)); err != nil {
-	panic(err)
+	return err
 }
 ```
 
@@ -1030,6 +1112,7 @@ if err := streamResponse(session, fmt.Sprintf("Use browser_navigate to open %s, 
 
 At the start of `main` in `src/main.rs`, validate the startup URL:
 
+<!-- code-id: 04-mcp-safety-rust-1 -->
 ```rust
 let argument = std::env::args()
     .nth(1)
@@ -1049,6 +1132,7 @@ if !matches!(target.scheme(), "http" | "https") || target.host_str().is_none() {
 
 Add the exact-target permission handler before `main`:
 
+<!-- code-id: 04-mcp-safety-rust-2 -->
 ```rust
 struct ScopedPermissions {
     target: Url,
@@ -1072,6 +1156,16 @@ impl PermissionHandler for ScopedPermissions {
         request: PermissionRequestData,
     ) -> PermissionResult {
         let payload = permission_payload(&request.extra);
+        let kind_allowed = if request.extra.get("permissionRequest").is_some() {
+            payload
+                .and_then(|payload| payload.get("kind"))
+                .and_then(serde_json::Value::as_str)
+                == Some("mcp")
+                && (request.kind.is_none()
+                    || request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Mcp))
+        } else {
+            request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Mcp)
+        };
         let server = payload
             .and_then(|payload| payload.get("serverName"))
             .and_then(serde_json::Value::as_str);
@@ -1083,7 +1177,8 @@ impl PermissionHandler for ScopedPermissions {
             .and_then(|args| args.get("url"))
             .and_then(serde_json::Value::as_str)
             .and_then(|value| Url::parse(value).ok());
-        if server == Some("playwright")
+        if kind_allowed
+            && server == Some("playwright")
             && matches!(
                 tool,
                 Some("browser_navigate" | "playwright-browser_navigate")
@@ -1121,6 +1216,7 @@ fn same_url(left: &Url, right: &Url) -> bool {
 
 Add the no-argument snapshot reader before `main`:
 
+<!-- code-id: 04-mcp-safety-rust-3 -->
 ```rust
 const MAX_SNAPSHOT_BYTES: u64 = 1_000_000;
 
@@ -1197,6 +1293,9 @@ impl ToolHandler for SnapshotReader {
 
 In `main`, define both local tools, configure MCP, and install the permission handler:
 
+Replace the existing body of `main` after the target URL validation with this complete configuration, send, and shutdown section. Keep the function's closing brace. Its final `result` is the return expression; remove any old trailing `Ok(())`.
+
+<!-- code-id: 04-mcp-safety-rust-4 -->
 ```rust
 let working_directory = std::env::current_dir()?;
 let lookup = Tool::new("accessibility_rule_lookup")
@@ -1245,15 +1344,37 @@ let config = config.with_permission_handler(Arc::new(ScopedPermissions {
 }));
 
 let client = Client::start(ClientOptions::default()).await?;
+let result = async {
+
 let session = client.create_session(config).await?;
-stream_response!(
-    session,
-    format!(
-        "Use browser_navigate to open {target}, then read_latest_accessibility_snapshot and report the page title."
-    )
-);
-session.disconnect().await?;
-client.stop().await?;
+let response_result = tokio::time::timeout(
+    std::time::Duration::from_secs(120),
+    async {
+        stream_response!(session, format!("Use browser_navigate to open {target}, then read_latest_accessibility_snapshot and report the page title."));
+        Ok::<(), Box<dyn std::error::Error>>(())
+    },
+)
+.await
+.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response"))
+.map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+.and_then(|result| result);
+let cleanup = session.disconnect().await;
+if let Err(error) = cleanup {
+    if response_result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Session cleanup also failed: {error}");
+}
+response_result
+}.await;
+let cleanup = client.stop().await;
+if let Err(error) = cleanup {
+    if result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Client cleanup also failed: {error}");
+}
+result
 ```
 
 Add the imports used by the new helpers, including
@@ -1271,6 +1392,7 @@ The first run may take longer while `npx` starts Playwright.
 
 Look for a page title such as:
 
+<!-- code-id: 04-mcp-safety-rust-5 -->
 ```text
 Page title: Blazor Accessibility Target
 ```
@@ -1295,6 +1417,7 @@ Compare your work with this complete Step 4 implementation.
 
 Session wiring from `src/main.rs`:
 
+<!-- code-id: 04-mcp-safety-rust-6 -->
 ```rust
 let mut config = SessionConfig::default();
 config.streaming = Some(true);
@@ -1327,8 +1450,37 @@ let config = config.with_permission_handler(Arc::new(ScopedPermissions {
 }));
 
 let client = Client::start(ClientOptions::default()).await?;
+let result = async {
+
 let session = client.create_session(config).await?;
-stream_response!(session, mcp_safety_prompt(&target));
+let response_result = tokio::time::timeout(
+    std::time::Duration::from_secs(120),
+    async {
+        stream_response!(session, format!("Use browser_navigate to open {target}, then read_latest_accessibility_snapshot and report the page title."));
+        Ok::<(), Box<dyn std::error::Error>>(())
+    },
+)
+.await
+.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response"))
+.map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+.and_then(|result| result);
+let cleanup = session.disconnect().await;
+if let Err(error) = cleanup {
+    if response_result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Session cleanup also failed: {error}");
+}
+response_result
+}.await;
+let cleanup = client.stop().await;
+if let Err(error) = cleanup {
+    if result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Client cleanup also failed: {error}");
+}
+result
 ```
 
 </details>
@@ -1342,19 +1494,15 @@ stream_response!(session, mcp_safety_prompt(&target));
 At the start of `main` in
 `src/main/java/workshop/AccessibilityReport.java`, validate the startup URL:
 
+<!-- code-id: 04-mcp-safety-java-1 -->
 ```java
-RunOptions options = parseRunOptions(args);
-URI target = options.target();
+URI target = parseTargetArgument(args);
 Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-if (options.allowLocalDemoMcp()) {
-    System.err.println("WARNING: Local demo fallback enabled. MCP request payload fields are unavailable, "
-            + "so this run approves only the mcp permission kind, not an exact target. "
-            + "Use only with the controlled workshop target.");
-}
 ```
 
 Add the parser helper:
 
+<!-- code-id: 04-mcp-safety-java-2 -->
 ```java
 private static URI parseTarget(String value) throws URISyntaxException {
     String candidate = value.contains("://") ? value : "https://" + value;
@@ -1373,103 +1521,85 @@ private static URI parseTarget(String value) throws URISyntaxException {
 
 Approve only exact-target Playwright navigation on the session configuration:
 
+<!-- code-id: 04-mcp-safety-java-3 -->
 ```java
-.setOnPermissionRequest((request, ignored) -> {
-    if ("mcp".equals(request.getKind())
-            && isExactNavigation(request.getExtensionData(), target)) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
-    }
-    // SDK issue #2273 currently prevents inspecting MCP request fields for the exact check.
-    if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-        return java.util.concurrent.CompletableFuture.completedFuture(
-                PermissionRequestResult.approveOnce());
-    }
-    return java.util.concurrent.CompletableFuture.completedFuture(
-            PermissionRequestResult.reject(
-                    "This workshop allows Playwright to navigate only to the exact requested target. "
-                            + "MCP requests without target data remain denied unless the explicit "
-                            + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-})
+.setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target))
 ```
 
-> **Temporary Java SDK limitation and local-demo fallback:** By default this is fail-closed: it
-> approves only an `mcp` request whose payload proves the configured Playwright navigation is the
-> exact entered URL. Current Java SDK releases do not expose those MCP request fields
-> ([github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273)), so the
-> default path rejects that request rather than guessing. For the controlled workshop target only,
-> pass `--allow-local-demo-mcp`. That explicit flag approves one `mcp` request at a time; it does
-> **not** use `APPROVE_ALL`, and the MCP configuration still exposes only Playwright
-> `browser_navigate`. It cannot enforce the exact URL while the SDK payload is unavailable. Never
-> enable it for a production, shared, or untrusted target.
+> **Strict Java policy:** The pinned SDK exposes permission payload fields. Keep exact-target
+> navigation and exact-file write checks; missing or malformed fields are rejected. Do not
+> broaden permissions to work around a rejected request.
 
-Add this option parser beside `parseTarget`:
+Add `parseTargetArgument` beside `parseTarget`. It accepts exactly one URL argument:
 
+<!-- code-id: 04-mcp-safety-java-4 -->
 ```java
-private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
+private static URI parseTargetArgument(String[] args) throws URISyntaxException {
+    if (args.length != 1) {
+        throw new IllegalArgumentException(
+                "Usage: mvn compile exec:java -Dexec.args=\"<http-or-https-url>\"");
+    }
+    return parseTarget(args[0]);
+}
+```
 
-private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-    boolean allowLocalDemoMcp = false;
-    String target = null;
-    for (String arg : args) {
-        if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-            if (allowLocalDemoMcp) {
-                throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-            }
-            allowLocalDemoMcp = true;
-        } else if (target == null) {
-            target = arg;
-        } else {
-            throw new IllegalArgumentException(usage());
+Open the supplied `src/main/java/workshop/WorkshopPermissionHandler.java` and inspect
+its exact-target checks below. This is a separate helper file, not code to paste inside
+`AccessibilityReport`. The session uses `WorkshopPermissionHandler.createForTarget(target)`:
+
+<!-- code-id: 04-mcp-safety-java-5 -->
+```java
+package workshop;
+
+import com.github.copilot.rpc.PermissionHandler;
+import com.github.copilot.rpc.PermissionRequestResult;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+
+public final class WorkshopPermissionHandler {
+    private WorkshopPermissionHandler() {
+    }
+
+    public static PermissionHandler createForTarget(URI target) {
+        Objects.requireNonNull(target, "target");
+        return (request, ignored) -> CompletableFuture.completedFuture(
+                request != null && "mcp".equals(request.getKind())
+                        && !Boolean.TRUE.equals(request.getManagedApprovalRequired())
+                        && isExactNavigation(request.getExtensionData(), target)
+                        ? PermissionRequestResult.approveOnce()
+                        : PermissionRequestResult.reject(
+                                "This workshop allows Playwright to navigate only to the exact requested target."));
+    }
+
+    private static boolean isExactNavigation(Map<String, Object> request, URI target) {
+        if (request == null || !"playwright".equals(request.get("serverName"))
+                || !(request.get("toolName") instanceof String toolName)
+                || !("browser_navigate".equals(toolName) || "playwright-browser_navigate".equals(toolName))
+                || !(request.get("args") instanceof Map<?, ?> args)
+                || !(args.get("url") instanceof String requested)) {
+            return false;
+        }
+        try {
+            URI candidate = new URI(requested);
+            return equalsIgnoreCase(candidate.getScheme(), target.getScheme())
+                    && equalsIgnoreCase(candidate.getHost(), target.getHost())
+                    && candidate.getPort() == target.getPort()
+                    && Objects.equals(candidate.getRawUserInfo(), target.getRawUserInfo())
+                    && Objects.equals(candidate.getRawPath(), target.getRawPath())
+                    && Objects.equals(candidate.getRawQuery(), target.getRawQuery())
+                    && Objects.equals(candidate.getRawFragment(), target.getRawFragment());
+        } catch (URISyntaxException exception) {
+            return false;
         }
     }
-    if (target == null) {
-        throw new IllegalArgumentException(usage());
+
+    private static boolean equalsIgnoreCase(String left, String right) {
+        return left == null ? right == null : right != null && left.equalsIgnoreCase(right);
     }
-    return new RunOptions(parseTarget(target), allowLocalDemoMcp);
-}
-
-private static String usage() {
-    return "Usage: mvn compile exec:java -Dexec.args=\"["
-            + LOCAL_DEMO_MCP_FLAG + "] <http-or-https-url>\"";
-}
-
-private record RunOptions(URI target, boolean allowLocalDemoMcp) {
-}
-```
-
-Add the URL-matching helpers:
-
-```java
-private static boolean isExactNavigation(Map<String, Object> request, URI target) {
-    if (request == null
-            || !"playwright".equals(request.get("serverName"))
-            || !(request.get("toolName") instanceof String toolName)
-            || !("browser_navigate".equals(toolName)
-                    || "playwright-browser_navigate".equals(toolName))
-            || !(request.get("args") instanceof Map<?, ?> args)
-            || !(args.get("url") instanceof String requested)) {
-        return false;
-    }
-    try {
-        return sameUrl(new URI(requested), target);
-    } catch (URISyntaxException ignored) {
-        return false;
-    }
-}
-
-private static boolean sameUrl(URI requested, URI allowed) {
-    return equalsIgnoreCase(requested.getScheme(), allowed.getScheme())
-            && equalsIgnoreCase(requested.getHost(), allowed.getHost())
-            && requested.getPort() == allowed.getPort()
-            && java.util.Objects.equals(requested.getRawUserInfo(), allowed.getRawUserInfo())
-            && java.util.Objects.equals(requested.getRawPath(), allowed.getRawPath())
-            && java.util.Objects.equals(requested.getRawQuery(), allowed.getRawQuery())
-            && java.util.Objects.equals(requested.getRawFragment(), allowed.getRawFragment());
-}
-
-private static boolean equalsIgnoreCase(String left, String right) {
-    return left == null ? right == null : right != null && left.equalsIgnoreCase(right);
 }
 ```
 
@@ -1477,6 +1607,7 @@ private static boolean equalsIgnoreCase(String left, String right) {
 
 Register a no-argument snapshot reader that only returns current-run Playwright files:
 
+<!-- code-id: 04-mcp-safety-java-6 -->
 ```java
 var readSnapshot = ToolDefinition.from(
         "read_latest_accessibility_snapshot",
@@ -1486,7 +1617,10 @@ var readSnapshot = ToolDefinition.from(
 
 Add the nested reader class:
 
+<!-- code-id: 04-mcp-safety-java-7 -->
 ```java
+private static final long MAX_SNAPSHOT_BYTES = 1_000_000;
+
 private static final class SnapshotReader {
     private final Path outputDirectory;
     private final Set<Path> existing;
@@ -1551,6 +1685,7 @@ private static final class SnapshotReader {
 
 Build the full session configuration and send the browser evidence prompt:
 
+<!-- code-id: 04-mcp-safety-java-8 -->
 ```java
 var lookup = ToolDefinition.from(
         "accessibility_rule_lookup",
@@ -1574,27 +1709,12 @@ var config = new SessionConfig()
                 .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                 .setWorkingDirectory(workingDirectory.toString())
                 .setTools(List.of("browser_navigate"))))
-        .setOnPermissionRequest((request, ignored) -> {
-            if ("mcp".equals(request.getKind())
-                    && isExactNavigation(request.getExtensionData(), target)) {
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.approveOnce());
-            }
-            if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.approveOnce());
-            }
-            return java.util.concurrent.CompletableFuture.completedFuture(
-                    PermissionRequestResult.reject(
-                            "This workshop allows Playwright to navigate only to the exact requested target. "
-                                    + "MCP requests without target data remain denied unless the explicit "
-                                    + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-        });
+        .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
 try (var client = new CopilotClient()) {
     client.start().get();
-    var session = client.createSession(config).get();
-    var response = session.sendAndWait(new MessageOptions().setPrompt(
+    try (var session = client.createSession(config).get()) {
+        ResponseStreamer.sendAndPrint(session,
             """
             Open %s with browser_navigate.
             1. Use browser_navigate to open that exact URL.
@@ -1602,32 +1722,43 @@ try (var client = new CopilotClient()) {
             3. Return the observed page title only.
 
             The permission handler must approve only this exact Playwright navigation target."""
-                    .formatted(target))).get();
-    if (response == null) {
-        throw new IllegalStateException("Copilot completed without an assistant message.");
+                    .formatted(target));
     }
-    System.out.println(response.getData().content());
 }
 ```
 
 Add the MCP and permission imports:
 
+<!-- code-id: 04-mcp-safety-java-9 -->
 ```java
 import com.github.copilot.rpc.McpStdioServerConfig;
-import com.github.copilot.rpc.PermissionRequestResult;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 ```
 
 ## Run it
 
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 
-The first run may take longer while `npx` starts Playwright. This command intentionally opts into
-the temporary local-demo fallback above; omit the flag to keep the strict fail-closed policy.
+The first run may take longer while `npx` starts Playwright. The exact-target policy stays
+active; a denied request is not a reason to grant broader permissions.
 
 Look for a page title such as:
 
+<!-- code-id: 04-mcp-safety-java-10 -->
 ```text
 Page title: Blazor Accessibility Target
 ```
@@ -1639,7 +1770,7 @@ Page title: Blazor Accessibility Target
 |---|---|
 | `npx` cannot be started | Rerun the preflight MCP command and verify Node.js is on `PATH`. |
 | Playwright cannot find a browser | Install Edge or Chrome, or configure an installed browser as described by Playwright MCP. |
-| A permission is rejected | The default handler intentionally denies missing or non-exact request payloads. Use the exact target when the SDK provides it; for this controlled target only, add `--allow-local-demo-mcp` until [#2273](https://github.com/github/copilot-sdk/issues/2273) is fixed. |
+| A permission is rejected | Inspect the exact URL and request payload; missing or nonmatching fields stay denied. |
 | No current-run snapshot is available | Keep the prompt order: call `browser_navigate` before `read_latest_accessibility_snapshot`. |
 | MCP or permission types unresolved | Add the `McpStdioServerConfig` and `PermissionRequestResult` imports. |
 
@@ -1652,6 +1783,7 @@ Compare your work with this complete Step 4 implementation.
 
 Session wiring from `AccessibilityReport.java`:
 
+<!-- code-id: 04-mcp-safety-java-11 -->
 ```java
 var config = new SessionConfig()
         .setStreaming(true)
@@ -1665,22 +1797,7 @@ var config = new SessionConfig()
                 .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                 .setWorkingDirectory(workingDirectory.toString())
                 .setTools(List.of("browser_navigate"))))
-        .setOnPermissionRequest((request, ignored) -> {
-            if ("mcp".equals(request.getKind())
-                    && isExactNavigation(request.getExtensionData(), target)) {
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.approveOnce());
-            }
-            if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                return java.util.concurrent.CompletableFuture.completedFuture(
-                        PermissionRequestResult.approveOnce());
-            }
-            return java.util.concurrent.CompletableFuture.completedFuture(
-                    PermissionRequestResult.reject(
-                            "This workshop allows Playwright to navigate only to the exact requested target. "
-                                    + "MCP requests without target data remain denied unless the explicit "
-                                    + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-        });
+        .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 ```
 
 </details>

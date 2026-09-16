@@ -26,7 +26,7 @@ export const accessibilityRuleLookup = defineTool("accessibility_rule_lookup", {
   },
 });
 
-export async function streamResponse(session: CopilotSession, prompt: string): Promise<void> {
+export async function streamResponse(session: CopilotSession, prompt: string, timeout = 120_000): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let receivedDelta = false;
     let settled = false;
@@ -34,15 +34,22 @@ export async function streamResponse(session: CopilotSession, prompt: string): P
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       unsubscribe();
       callback();
     };
+    const timer = setTimeout(() => finish(() => reject(new Error("Response timeout."))), timeout);
     unsubscribe = session.on((event) => {
       if (event.type === "assistant.message_delta" && event.data.deltaContent) {
         receivedDelta = true;
         process.stdout.write(event.data.deltaContent);
-      } else if (event.type === "assistant.message" && !receivedDelta) {
-        process.stdout.write(event.data.content);
+      } else if (event.type === "assistant.message") {
+        if (!receivedDelta) process.stdout.write(event.data.content);
+        receivedDelta = false;
+      } else if (event.type === "tool.execution_start") {
+        console.log(`\n[tool:start] ${event.data.toolName}`);
+      } else if (event.type === "tool.execution_complete") {
+        console.log(`[tool:done] success=${event.data.success}`);
       } else if (event.type === "session.error") {
         finish(() => reject(new Error(event.data.message)));
       } else if (event.type === "session.idle") {

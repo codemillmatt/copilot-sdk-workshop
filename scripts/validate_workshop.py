@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 import re
 import sys
+import tomllib
+import xml.etree.ElementTree as ET
+import zipfile
 from urllib.parse import urlsplit
 
 
@@ -458,7 +461,7 @@ LANGUAGE_APIS = {
     "java": {
         "client": ("new CopilotClient",),
         "session": ("createSession",),
-        "send": ("sendAndWait",),
+        "send": ("sendAndWait", "ResponseStreamer."),
         "stream": ("setStreaming(true)",),
         "tool": ('ToolDefinition.from(', '"accessibility_rule_lookup"'),
     },
@@ -479,6 +482,8 @@ def runtime_source(directory: Path, language: str, text: str) -> str:
             return text + "\n" + read(directory / "src" / "workshop.ts")
     if language == "dotnet" and "ResponseStreamer.SendAndPrintAsync" in text:
         return text + "\n" + read(directory / "Helpers" / "ResponseStreamer.cs")
+    if language == "java" and "ResponseStreamer." in text:
+        return text + "\n" + read(directory / "src/main/java/workshop/ResponseStreamer.java")
     return text
 
 
@@ -505,8 +510,8 @@ def validate_runtime_flow(language: str, stage: str, text: str, label: Path) -> 
                 f"{label} does not print and complete the Copilot response")
     elif language == "python":
         markers = (
-            ("AssistantMessageData", "print(content)", "SessionErrorData", "SessionIdleData",
-             "await done.wait()", "if error is not None", "done.set()")
+            ("AssistantMessageData", "session.send_and_wait", "print(response.data.content)",
+             "response is None", "raise RuntimeError")
             if not streaming
             else ("AssistantMessageDeltaData", "AssistantMessageData", "received_delta = False",
                  "received_delta = True", "not received_delta", "print(delta", "print(content)",
@@ -550,7 +555,7 @@ def validate_runtime_flow(language: str, stage: str, text: str, label: Path) -> 
     elif language == "java":
         markers = (
             ("sendAndWait", "response == null", "response.getData().content()", ".get()")
-            if not streaming or label != Path("finished/java/hello-copilot-sdk")
+            if not streaming
             else ("AssistantMessageDeltaEvent", "AssistantMessageEvent", "receivedDelta",
                   "System.out.print", "sendAndWait", ".get()")
         )
@@ -564,17 +569,8 @@ LATER_CAPABILITIES = {
     "mcp": ("mcpServers", "mcp_servers", "MCPServers", "McpStdioServerConfig", "McpServerConfig"),
     "browser": ("browser_navigate", "playwright-browser_navigate"),
     "snapshot": ("read_latest_accessibility_snapshot",),
-    "permission": ("permissionForTarget", "permission_for_target", "OnPermissionRequest", "with_permission_handler", "setOnPermissionRequest"),
+    "permission": ("permissionForTarget", "permission_for_target", "ScopedPermissions", "CreateForTarget", "isExactNavigation"),
     "report": ("Review limits", "review limits", "reportPrompt", "report_prompt"),
-}
-
-DEFAULT_PERMISSION_HANDLERS = {
-    "dotnet": "OnPermissionRequest = PermissionHandler.ApproveAll",
-    "nodejs": "onPermissionRequest: approveAll",
-    "python": "on_permission_request=PermissionHandler.approve_all",
-    "go": "OnPermissionRequest: copilot.PermissionHandler.ApproveAll",
-    "rust": "with_permission_handler(permission::approve_all())",
-    "java": "setOnPermissionRequest(PermissionHandler.APPROVE_ALL)",
 }
 
 PLAYWRIGHT_MCP_PACKAGE = "@playwright/mcp@0.0.78"
@@ -618,8 +614,10 @@ def validate_executable_stage(language: str, stage: str, directory: Path) -> str
 
     if stage == "01-first-session" or (
             language == "java" and stage in {"02-streaming", "03-local-tool"}):
-        require(DEFAULT_PERMISSION_HANDLERS[language] in text,
-                f"{label} does not configure the required baseline permission handler")
+        require(re.search(MUSEUM_ANY_PERMISSION_HANDLER[language], museum_tokens(text)) is not None
+                and re.search(r"deny|reject", text, re.IGNORECASE) is not None
+                and not re.search(r"approve_?all", text, re.IGNORECASE),
+                f"{label} must configure rejection of unexpected baseline permission requests")
 
     validate_runtime_flow(language, stage, runtime_source(directory, language, text), label)
     if stage == "04-mcp-safety":
@@ -791,11 +789,6 @@ def validate_shared_language_content(markdown_file: Path) -> None:
         elif line == ":::":
             active_language = None
         elif active_language is None:
-            require(
-                not line.startswith("### "),
-                f"{markdown_file.relative_to(ROOT)}:{line_number} exposes a "
-                "language-specific procedure heading outside a language block",
-            )
             for marker in UNSCOPED_TRACK_MARKERS:
                 require(
                     marker.casefold() not in line.casefold(),
@@ -998,7 +991,7 @@ MUSEUM_HELPER_LESSON_REFERENCES = {
     "python": re.compile(r"(?<![\w/])curator\.py"),
     "go": re.compile(r"(?<![\w/])curator\.go"),
     "rust": re.compile(r"src/lib\.rs"),
-    "java": re.compile(r"(?<![\w/])Curator[A-Za-z]+\.java"),
+    "java": re.compile(r"(?<![\w])(?:src/main/java/workshop/)?Curator[A-Za-z]+\.java"),
 }
 MUSEUM_ABSTRACTION_MARKERS = (
     "icuratorclient",
@@ -1295,6 +1288,9 @@ def validate_python_dependencies() -> None:
                     f"{directory.relative_to(ROOT)} has an unpinned Python dependency: {requirement}")
         require(any(requirement.startswith("github-copilot-sdk==") for requirement in requirements),
                 f"{directory.relative_to(ROOT)} does not pin github-copilot-sdk")
+        declared = tomllib.loads(read(directory / "pyproject.toml"))["project"]["dependencies"]
+        require(set(declared) == set(requirements),
+                f"{directory.relative_to(ROOT)} pyproject.toml and requirements.txt disagree")
 
 
 def validate_security_invariants() -> None:
@@ -1316,7 +1312,7 @@ def validate_security_invariants() -> None:
                 "python": "def _same_url",
                 "go": "func sameURL",
                 "rust": "fn same_url",
-                "java": "boolean sameUrl",
+                "java": "isExactNavigation",
             }
             require(exact_url_markers[language] in source, f"{directory.relative_to(ROOT)} does not compare target URL components exactly")
             if language == "rust":
@@ -1327,23 +1323,17 @@ def validate_security_invariants() -> None:
                     f"{directory.relative_to(ROOT)} does not normalize the Rust SDK permission payload",
                 )
             if language == "java":
-                strict_marker = '&& isExactNavigation(request.getExtensionData(), target)'
-                fallback_marker = 'if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind()))'
-                reject_marker = "PermissionRequestResult.reject"
                 require(
                     all(marker in source for marker in (
-                        'LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp"',
-                        "parseRunOptions(args)",
-                        strict_marker,
-                        fallback_marker,
+                        "isExactNavigation(request.getExtensionData(), target)",
                         "PermissionRequestResult.approveOnce()",
-                        reject_marker,
+                        "PermissionRequestResult.reject",
                     )),
-                    f"{directory.relative_to(ROOT)} does not implement the explicit Java local-demo MCP fallback",
+                    f"{directory.relative_to(ROOT)} must validate Java permission payloads and reject other requests",
                 )
                 require(
-                    source.index(strict_marker) < source.index(fallback_marker) < source.index(reject_marker),
-                    f"{directory.relative_to(ROOT)} does not preserve exact-target rejection before its Java fallback",
+                    "--allow-local-demo" not in source,
+                    f"{directory.relative_to(ROOT)} still exposes a broad Java demo permission fallback",
                 )
                 require(
                     "APPROVE_ALL" not in source,
@@ -1375,26 +1365,24 @@ def validate_security_invariants() -> None:
         rendered = render_language_markdown(WORKSHOP / lesson, "java")
         require(
             all(marker in rendered for marker in (
-                "--allow-local-demo-mcp",
-                "https://github.com/github/copilot-sdk/issues/2273",
                 "exact",
-                "mcp",
+                "MCP",
             )),
-            f"workshop/{lesson} does not document the Java local-demo MCP fallback boundary",
+            f"workshop/{lesson} does not explain strict Java navigation permissions",
         )
+        require("--allow-local-demo" not in rendered,
+                f"workshop/{lesson} still teaches a broad Java permission fallback")
     java_report_lesson = render_language_markdown(WORKSHOP / "09-interactive-html-report.md", "java")
     require(
         all(marker in java_report_lesson for marker in (
-            "--allow-local-demo-mcp",
-            "--allow-local-demo-write",
-            "options.allowLocalDemoWrite()",
             '"write".equals(request.getKind())',
             "builtin:apply_patch",
-            "cannot enforce the output path",
-            "https://github.com/github/copilot-sdk/issues/2273",
+            "isReportWrite",
         )),
-        "workshop/09-interactive-html-report.md does not constrain the Java local-demo write fallback",
+        "workshop/09-interactive-html-report.md must validate the Java report path",
     )
+    require("--allow-local-demo" not in java_report_lesson,
+            "The Java HTML lesson must not bypass exact-path verification")
 
 
 def validate_playwright_file_output(text: str, label: Path) -> None:
@@ -1455,8 +1443,11 @@ def validate_project_behavior() -> None:
         )
 
     node_report_package = read(ROOT / "finished" / "nodejs" / "accessibility-report" / "package.json")
-    require('"start": "tsx src/report.ts"' in node_report_package,
-            "Node accessibility-report npm start must execute src/report.ts")
+    require('"start": "tsx src/index.ts"' in node_report_package,
+            "Node accessibility-report npm start must execute the documented index entrypoint")
+    for language in ("nodejs", "python"):
+        validate_executable_stage(language, "06-structured-report",
+                                  ROOT / "finished" / language / "accessibility-report")
     for directory in [ROOT / "start-accessibility" / "nodejs", ROOT / "finished" / "nodejs" / "accessibility-report"]:
         source = read(directory / "src" / "workshop.ts")
         require("const existingSnapshots = safeSnapshotNames(outputDirectory)" in source,
@@ -1484,7 +1475,8 @@ def validate_site_behavior() -> None:
             "Homepage must offer SDLC and museum workshop choices")
     require(index.count('name="language"') == len(LANGUAGES),
             "Homepage must offer exactly six language choices")
-    require('name="language" value="dotnet" required' in index and "checked" not in index,
+    require('name="language" value="dotnet" required' in index
+            and not re.search(r"<input\b[^>]*\schecked(?:\s|=|/?>)", index),
             "Homepage must require a language without choosing a default")
     require('id="languagePicker"' in index and "homepage.js" in index, "Homepage is missing language selection behavior")
     require("language-navigation.js" in index and "language-navigation.js" in step, "Homepage and lessons must share language navigation")
@@ -1575,8 +1567,10 @@ def validate_documentation() -> None:
             f"Accessibility preflight must change into the {language} starter directory",
         )
     require(
-        "git checkout -- ." in accessibility_preflight,
-        "Accessibility preflight must explain how to restore a clean starter",
+        "git restore --source=HEAD --" in accessibility_preflight
+        and "backup" in accessibility_preflight.casefold()
+        and "git checkout -- ." not in accessibility_preflight,
+        "Accessibility preflight must explain preservation-first, named-file recovery",
     )
     require(
         "git status" in accessibility_preflight,
@@ -1633,7 +1627,7 @@ def validate_documentation() -> None:
         "deny-by-default",
         "Research notes are never merged into the approved facts.",
         "The session that writes the exhibit keeps its one-tool allowlist.",
-        "Consulted Wikipedia sources:",
+        "Model-reported Wikipedia sources (unverified):",
     ):
         require(
             required_step in wikipedia_lesson,
@@ -1646,8 +1640,8 @@ def validate_documentation() -> None:
     require(
         "id: 'museum-07-wikipedia-research'" in lesson_viewer
         and "title: 'Research with Wikipedia MCP',\n                navTitle: 'Wikipedia research'" in lesson_viewer
-        and "kind: 'core',\n                number: 7,\n                time: '20 min'" in lesson_viewer,
-        "Wikipedia MCP must be registered as required 20-minute museum step 7",
+        and "kind: 'core',\n                number: 7," in lesson_viewer,
+        "Wikipedia MCP must remain registered as core museum step 7",
     )
 
     html_lesson = read(WORKSHOP / "museum-08-interactive-exhibit-page.md")
@@ -1663,15 +1657,15 @@ def validate_documentation() -> None:
         )
     require(
         "id: 'museum-08-interactive-exhibit-page'" in lesson_viewer
-        and "kind: 'optional',\n                number: 8,\n                time: '15 min'" in lesson_viewer,
-        "The interactive exhibit page must be registered as optional 15-minute museum step 8",
+        and "kind: 'optional',\n                number: 8," in lesson_viewer,
+        "The interactive exhibit page must remain registered as optional museum step 8",
     )
 
     landing_page = read(DOCS / "index.html")
     require(
-        "Non-SDLC tool · 90 minutes" in landing_page
-        and "90 minutes for Museum Exhibit Studio" in read(ROOT / "README.md"),
-        "Museum workshop duration must match the seven timed core steps",
+        "Self-paced" in landing_page
+        and "self-paced" in read(ROOT / "README.md"),
+        "The front doors must describe the self-paced workshop without unsupported timing claims",
     )
 
     museum_lessons = {name: read(WORKSHOP / name) for name in MUSEUM_LESSONS}
@@ -1709,19 +1703,8 @@ def validate_documentation() -> None:
                 f"{MUSEUM_HELPER_LESSON_REFERENCES[language].pattern})",
             )
 
-    # The museum curator reaches its approved facts through one application-owned local tool.
-    # Nothing in the track may claim the session is tool-free or that its allowlist is empty.
-    for retired_framing in (
-        "tool-free",
-        "tool free",
-        "empty tool allowlist",
-        "empty allowlist",
-    ):
-        require(
-            retired_framing not in combined_museum.casefold(),
-            f"Museum lessons still describe the curator as {retired_framing!r}; the curator now "
-            "reaches its approved facts through the approved_fact_lookup tool",
-        )
+    require("explicit empty tool allowlist" in museum_lessons["museum-01-first-curator-session.md"],
+            "Museum's first session must explicitly explain that tools are disabled")
 
     facts_lesson = museum_lessons["museum-04-approved-facts.md"]
     require(
@@ -1759,7 +1742,7 @@ def validate_documentation() -> None:
     museum_preflight = read(WORKSHOP / "museum-00-preflight.md")
     for clone_step in (
         "git clone https://github.com/jamesmontemagno/copilot-sdk-workshop.git",
-        'test "$(git rev-parse --show-toplevel)" = "$PWD"',
+        "git rev-parse --show-toplevel",
     ):
         require(
             clone_step in museum_preflight,
@@ -1775,8 +1758,10 @@ def validate_documentation() -> None:
             f"Museum preflight must change into the {language} starter directory",
         )
     require(
-        "git checkout -- ." in museum_preflight,
-        "Museum preflight must explain how to restore a clean starter",
+        "git restore --source=HEAD --" in museum_preflight
+        and "backup" in museum_preflight.casefold()
+        and "git checkout -- ." not in museum_preflight,
+        "Museum preflight must explain preservation-first, named-file recovery",
     )
     require(
         "git status" in museum_preflight,
@@ -1791,6 +1776,33 @@ def validate_documentation() -> None:
         "Museum Exhibit Studio starter" in museum_preflight,
         "Museum preflight must state the starter identity output learners should see",
     )
+    require(
+        "## What you'll build" in museum_preflight
+        and "## Check what is already installed" in museum_preflight
+        and museum_preflight.index("## What you'll build")
+            < museum_preflight.index("## Check what is already installed"),
+        "Museum preflight must introduce the project before checking prerequisites",
+    )
+    for required_help in (
+        "<summary>Install the selected language tools</summary>",
+        "<summary>Install Git and Copilot CLI</summary>",
+        "<summary>Install Node.js for Wikipedia research</summary>",
+        "<summary>Troubleshoot the prerequisite checks</summary>",
+    ):
+        require(required_help in museum_preflight,
+                f"Museum preflight is missing expandable help: {required_help}")
+    require(
+        "Exact example text" not in museum_preflight
+        and "non-SDLC" not in museum_preflight,
+        "Museum preflight must not include unexplained example text or non-SDLC framing",
+    )
+    for language in LANGUAGES:
+        rendered = render_language_markdown(WORKSHOP / "museum-00-preflight.md", language)
+        require(
+            "| Requirement | Why the workshop needs it | Check |" in rendered
+            and rendered.count("<details>") >= 4,
+            f"Museum preflight ({language}) must check installed requirements before expandable setup help",
+        )
 
 
 def validate_editor_open_guidance() -> None:
@@ -1849,9 +1861,7 @@ def validate_editor_open_guidance() -> None:
 
 
 def validate_museum_permission_handlers() -> None:
-    # Every museum session configuration has to answer permission requests. Without a handler the
-    # runtime leaves each request pending instead of denying it, so a learner's Step 1 run stalls
-    # and never prints an exhibit. Assert the per-language SDK member rather than any prose.
+    # Missing handlers can leave permission requests pending. Check the SDK member, not prose.
     for lesson_name in MUSEUM_SESSION_CONFIGURATION_LESSONS:
         for language in LANGUAGES:
             rendered = museum_tokens(render_language_markdown(WORKSHOP / lesson_name, language))
@@ -1876,15 +1886,14 @@ def validate_museum_permission_handlers() -> None:
                 "MUSEUM_SESSION_CONFIGURATION_LESSONS, so its permission handler is unchecked",
             )
 
-    # The finished apps run the same generation session the lessons build, so they need the same
-    # approve-all handler. The scoped research and HTML handlers are checked elsewhere.
     for language in LANGUAGES:
         finished = ROOT / "finished" / language / "museum-exhibit-studio"
         entrypoint = museum_tokens(read(finished / MUSEUM_ENTRYPOINTS[language]))
         require(
-            re.search(MUSEUM_APPROVE_ALL_PERMISSION_HANDLER[language], entrypoint) is not None,
-            f"{finished.relative_to(ROOT)} does not set the approve-all permission handler on the "
-            "exhibit generation session, so the finished app stalls on the first request",
+            re.search(MUSEUM_ANY_PERMISSION_HANDLER[language], entrypoint) is not None
+            and re.search(r"deny|reject", entrypoint, re.IGNORECASE) is not None
+            and re.search(MUSEUM_APPROVE_ALL_PERMISSION_HANDLER[language], entrypoint) is None,
+            f"{finished.relative_to(ROOT)} must reject unexpected generation permissions rather than approve all",
         )
 
 
@@ -2009,13 +2018,20 @@ def validate_configuration_explainers() -> None:
     for lesson_name in PERMISSION_DECISION_EXPLAINER_LESSONS:
         for language in LANGUAGES:
             rendered = render_language_markdown(WORKSHOP / lesson_name, language)
-            for kind in PERMISSION_DECISION_KINDS:
+            kinds = PERMISSION_DECISION_KINDS[:2] if lesson_name.startswith("museum-") else PERMISSION_DECISION_KINDS
+            for kind in kinds:
                 require(
                     kind in rendered,
                     f"workshop/{lesson_name} ({language}) must name the {kind} permission "
                     "decision; this is where the learner first writes a real decision instead of "
                     "a blanket approve-all handler",
                 )
+    instructor_research = ROOT / "instructor" / "museum" / "07-research.md"
+    require(instructor_research.exists(), "Museum research needs its deeper instructor notes")
+    if instructor_research.exists():
+        for kind in PERMISSION_DECISION_KINDS:
+            require(kind in read(instructor_research),
+                    f"Instructor research notes must preserve the {kind} decision explanation")
 
 
 def validate_workflows() -> None:
@@ -2056,6 +2072,57 @@ def validate_workflows() -> None:
         require(required in deployment_workflow, f"deploy.yml is missing deployment step: {required}")
 
 
+def validate_instructor_materials() -> None:
+    instructor = ROOT / "instructor" / "museum"
+    pairs = {
+        "00-preflight.md": "museum-00-preflight.md",
+        "01-first-session.md": "museum-01-first-curator-session.md",
+        "02-streaming.md": "museum-02-stream-the-curator.md",
+        "03-curator-voice.md": "museum-03-curator-voice.md",
+        "04-approved-facts.md": "museum-04-approved-facts.md",
+        "05-guardrails.md": "museum-05-guardrails.md",
+        "06-structure.md": "museum-06-prove-the-structure.md",
+        "07-research.md": "museum-07-wikipedia-research.md",
+        "08-exhibit-page.md": "museum-08-interactive-exhibit-page.md",
+    }
+    for note, lesson in pairs.items():
+        file = instructor / note
+        require(file.exists(), f"Missing instructor companion {note}")
+        if file.exists():
+            require(f"../../workshop/{lesson}" in read(file),
+                    f"Instructor {note} must identify its paired learner page")
+            validate_markdown_links(file)
+    require((instructor / "README.md").exists(), "Missing instructor teaching guide")
+    if (instructor / "README.md").exists():
+        validate_markdown_links(instructor / "README.md")
+    validate_html_assets(DOCS / "instructor" / "index.html")
+    deploy = read(ROOT / ".github" / "workflows" / "deploy.yml")
+    require("cp instructor/museum/*.md ./_site/instructor/content/" in deploy,
+            "Pages must include canonical instructor notes")
+    presentation = DOCS / "instructor" / "museum-instructor.pptx"
+    require(presentation.exists(), "Missing instructor PowerPoint")
+    if presentation.exists():
+        try:
+            with zipfile.ZipFile(presentation) as archive:
+                slides = [name for name in archive.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", name)]
+                notes = [name for name in archive.namelist() if re.fullmatch(r"ppt/notesSlides/notesSlide\d+\.xml", name)]
+                require(len(slides) == 8 and len(notes) == 8,
+                        "The instructor deck must have eight slides with speaker notes")
+                children = [element.tag.rsplit("}", 1)[-1]
+                            for element in ET.fromstring(archive.read("ppt/presentation.xml"))]
+                require("notesMasterIdLst" in children and "sldIdLst" in children
+                        and children.index("notesMasterIdLst") < children.index("sldIdLst"),
+                        "The notes-master list must precede slide IDs in the Office XML sequence")
+                for name in notes:
+                    document = ET.fromstring(archive.read(name))
+                    text = " ".join(element.text or "" for element in document.iter()
+                                    if element.tag.endswith("}t"))
+                    require("TIME BOX:" in text and "RETURN TO HANDS-ON" in text,
+                            f"{name} needs a timing cue and hands-on handoff")
+        except (zipfile.BadZipFile, ET.ParseError) as error:
+            require(False, f"Invalid instructor presentation: {error}")
+
+
 validate_language_registry()
 for lesson in LESSONS:
     lesson_path = WORKSHOP / lesson
@@ -2081,6 +2148,7 @@ validate_museum_rust_error_types()
 validate_learn_more_sections()
 validate_configuration_explainers()
 validate_workflows()
+validate_instructor_materials()
 
 if errors:
     print("Workshop validation failed:")

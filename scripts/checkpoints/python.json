@@ -1,0 +1,95 @@
+{
+  "accessibility": [
+    {"lesson":"01-first-session.md","operations":[{"op":"write","file":"main.py","block":"01-first-session-python-1"}]},
+    {"lesson":"02-streaming.md","operations":[{"op":"write","file":"main.py","block":"02-streaming-python-1"}]},
+    {"lesson":"03-local-tool.md","operations":[
+      {"op":"prepend","file":"main.py","block":"03-local-tool-python-2"},
+      {"op":"replace-region","file":"main.py","anchor":"        async with await client.create_session(","end":"            if error is not None:\n                raise error","block":"03-local-tool-python-3","indent":8}
+    ]},
+    {"lesson":"04-mcp-safety.md","operations":[
+      {"op":"write","file":"main.py","block":"04-mcp-safety-python-1"},
+      {"op":"append","file":"main.py","block":"04-mcp-safety-python-4"},
+      {"op":"append","file":"main.py","text":"if __name__ == \"__main__\":\n    asyncio.run(main())"}
+    ]},
+    {"lesson":"05-combine-tools.md","operations":[
+      {"op":"write","file":"main.py","block":"05-combine-tools-python-1"},
+      {"op":"append","file":"main.py","block":"05-combine-tools-python-2"}
+    ]},
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"replace-function","file":"workshop.py","anchor":"def report_prompt(","block":"06-structured-report-python-1"},
+      {"op":"write","file":"report.py","block":"06-structured-report-python-2"},
+      {"op":"write","file":"main.py","block":"06-structured-report-python-3"}
+    ]},
+    {"lesson":"07-run-explain.md","operations":[]},
+    {"lesson":"08-model-selection.md","operations":[
+      {"op":"write","file":"model_selector.py","block":"08-model-selection-python-1"},
+      {"op":"write","file":"report.py","block":"08-model-selection-python-2"}
+    ]},
+    {"lesson":"09-interactive-html-report.md","operations":[
+      {"op":"replace-function","file":"workshop.py","anchor":"def permission_for_target(","block":"09-interactive-html-report-python-1"},
+      {"op":"replace-function","file":"workshop.py","anchor":"def report_prompt(","block":"09-interactive-html-report-python-3"},
+      {"op":"replace-config","file":"report.py","block":"09-interactive-html-report-python-2"},
+      {"op":"prepend","file":"report.py","block":"09-html-python-artifact-import"},
+      {"op":"replace-region","file":"report.py","anchor":"            unsubscribe = session.on(on_event)","end":"            if error is not None:\n                raise error","block":"09-html-python-artifact-check"}
+    ]}
+  ],
+  "accessibility-html-direct": [
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"write","file":"report.py","block":"06-structured-report-python-2"},
+      {"op":"write","file":"main.py","block":"06-structured-report-python-3"}
+    ]},
+    {"lesson":"09-interactive-html-report.md","operations":[
+      {"op":"replace-function","file":"workshop.py","anchor":"def permission_for_target(","block":"09-interactive-html-report-python-1"},
+      {"op":"replace-function","file":"workshop.py","anchor":"def report_prompt(","block":"09-interactive-html-report-python-3"},
+      {"op":"replace-config","file":"report.py","block":"09-interactive-html-report-python-2"},
+      {"op":"prepend","file":"report.py","block":"09-html-python-artifact-import"},
+      {"op":"replace-region","file":"report.py","anchor":"            unsubscribe = session.on(on_event)","end":"            if error is not None:\n                raise error","block":"09-html-python-artifact-check"}
+    ]}
+  ],
+  "accessibility-references": [
+    {"lesson":"01-first-session.md","operations":[{"op":"write","file":"main.py","block":"01-first-session-python-3"}]},
+    {"lesson":"02-streaming.md","operations":[{"op":"write","file":"main.py","block":"02-streaming-python-3"}]},
+    {"lesson":"03-local-tool.md","operations":[{"op":"write","file":"main.py","block":"03-local-tool-python-5"}]},
+    {"lesson":"04-mcp-safety.md","operations":[{"op":"write","file":"main.py","block":"04-mcp-safety-python-6"}]},
+    {"lesson":"05-combine-tools.md","operations":[{"op":"write","file":"main.py","block":"05-combine-tools-python-3"}]},
+    {"lesson":"06-structured-report.md","operations":[
+      {"op":"write","file":"main.py","block":"06-structured-report-python-4"},
+      {"op":"write","file":"report.py","block":"06-structured-report-python-5"},
+      {"op":"replace-function","file":"workshop.py","anchor":"def report_prompt(","block":"06-structured-report-python-6"}
+    ]}
+  ],
+  "museum": [
+    {"lesson":"museum-01-first-curator-session.md","operations":[{"op":"write","file":"main.py","block":"museum-01-first-curator-session-python-1"}]},
+    {"lesson":"museum-02-stream-the-curator.md","operations":[{"op":"write","file":"main.py","block":"museum-02-stream-the-curator-python-1"}]},
+    {"lesson":"museum-03-curator-voice.md","operations":[{"op":"write","file":"main.py","block":"museum-03-curator-voice-python-1"}]},
+    {"lesson":"museum-04-approved-facts.md","operations":[
+      {"op":"replace","file":"main.py","anchor":"from curator import stream_exhibit","block":"museum-04-approved-facts-python-1"},
+      {"op":"after","file":"main.py","anchor":"Write for a broad public audience with warmth, clarity, and historical restraint.","block":"museum-04-approved-facts-shared-1"},
+      {"op":"before","file":"main.py","anchor":"async def main(","block":"museum-04-approved-facts-python-2"},
+      {"op":"replace-function","file":"main.py","anchor":"async def main(","block":"museum-04-approved-facts-python-3"}
+    ]},
+    {"lesson":"museum-05-guardrails.md","operations":[
+      {"op":"after","file":"main.py","anchor":"import asyncio","text":"import os\nimport sys\nfrom collections.abc import Iterable\nfrom typing import Any"},
+      {"op":"replace","file":"main.py","anchor":"    FACT_SETS,","text":"    FACT_SETS,\n    GENERATION_TIMEOUT_SECONDS,"},
+      {"op":"before","file":"main.py","anchor":"async def main(","block":"museum-05-guardrails-python-1"},
+      {"op":"replace-tail","file":"main.py","anchor":"async def main(","block":"museum-05-guardrails-python-2"}
+    ]},
+    {"lesson":"museum-06-prove-the-structure.md","operations":[
+      {"op":"replace","file":"main.py","anchor":"    FACT_SETS,","text":"    FACT_SETS,\n    format_validation,\n    validate_exhibit,"},
+      {"op":"replace-region","file":"main.py","anchor":"        print()\n        await run_session(","end":"        return 0","block":"museum-06-prove-the-structure-python-1"}
+    ]},
+    {"lesson":"museum-07-wikipedia-research.md","operations":[
+      {"op":"replace","file":"main.py","anchor":"    FACT_SETS,","text":"    FACT_SETS,\n    RESEARCH_TIMEOUT_SECONDS,\n    WIKIPEDIA_TOOLS,\n    extract_sources,\n    wikipedia_permission_handler,\n    wikipedia_server,"},
+      {"op":"before","file":"main.py","anchor":"def build_exhibit_prompt(","block":"museum-07-wikipedia-research-python-1"},
+      {"op":"before","file":"main.py","anchor":"async def main(","block":"museum-07-wikipedia-research-python-2"},
+      {"op":"before","file":"main.py","anchor":"        print()\n        exhibit = await run_session(","block":"museum-07-wikipedia-research-python-3"},
+      {"op":"after","file":"main.py","anchor":"        print(format_validation(validate_exhibit(exhibit)))","block":"museum-07-wikipedia-research-python-4"}
+    ]},
+    {"lesson":"museum-08-interactive-exhibit-page.md","operations":[
+      {"op":"after","file":"main.py","anchor":"import asyncio","text":"from pathlib import Path"},
+      {"op":"replace","file":"main.py","anchor":"    FACT_SETS,","text":"    FACT_SETS,\n    capture_artifact_state,\n    verify_artifact_update,\n    exhibit_write_permission,"},
+      {"op":"before","file":"main.py","anchor":"async def main(","block":"museum-08-interactive-exhibit-page-python-1"},
+      {"op":"before","file":"main.py","anchor":"        return 0","block":"museum-08-interactive-exhibit-page-python-2"}
+    ]}
+  ]
+}

@@ -5,7 +5,7 @@
 // Everything below is yours to write, one lesson at a time.
 //
 // Step 1  First curator session .......... create the CopilotClient, create a session with
-//                                          onPermissionRequest: approveAll so requests get an
+//                                          an empty tool allowlist and a reject handler so requests get an
 //                                          answer, send a prompt, print the reply, then
 //                                          disconnect and stop.
 // Step 2  Stream the curator ............. swap the blocking send for streamExhibit() so tokens

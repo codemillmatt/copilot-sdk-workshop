@@ -1,12 +1,27 @@
 # Preflight: prepare your machine
 
 > **Untimed preparation**  
-> Complete this page before starting the 90-minute workshop.
+> Complete this page before starting the self-paced workshop.
+
+Use the public workshop target only. Prompts, browser snapshots, and tool results can be sent to
+the configured model service and consume your account's usage allowance. Do not review private
+pages or include credentials in a prompt. The browser and local callbacks run on your machine;
+that does not mean their output stays there.
+
+The Git and language-runtime commands shown without shell tabs use the same syntax in Bash and
+PowerShell. Use the shell tabs for environment variables and virtual environments.
 
 ## What you'll have ready
 
 By the end of preflight, you'll have the repository cloned, the Copilot CLI authenticated, the
 starter project built, and Playwright MCP downloaded and ready.
+
+MCP means **Model Context Protocol**, a way to connect an agent to external tool servers. Here,
+Playwright supplies browser automation in a separate process. We will explain and configure that
+boundary in Step 4; downloading the package does not grant a model permission to use it.
+Run one application instance per starter directory so snapshot and output ownership stay clear.
+Keep backup copies outside the repository; a second source file inside a project can accidentally
+be included in its build.
 
 :::language dotnet
 ## What you need
@@ -21,6 +36,7 @@ starter project built, and Playwright MCP downloaded and ready.
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-dotnet-1 -->
 ```text
 $ dotnet --version
 10.0.x
@@ -44,6 +60,7 @@ GitHub Copilot CLI ...
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-nodejs-1 -->
 ```text
 $ node --version
 v22.12.x
@@ -71,6 +88,7 @@ See the official
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-python-1 -->
 ```text
 $ python --version
 Python 3.11.x
@@ -97,6 +115,7 @@ The Python SDK can download a pinned runtime on first use. See the official
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-go-1 -->
 ```text
 $ go version
 go version go1.24.x ...
@@ -124,6 +143,7 @@ See the official
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-rust-1 -->
 ```text
 $ rustc --version
 rustc 1.94.x
@@ -153,6 +173,7 @@ See the official
 
 Your commands should return output in this shape:
 
+<!-- code-id: 00-preflight-java-1 -->
 ```text
 $ java -version
 openjdk version "17.x.x" ...
@@ -178,7 +199,12 @@ cd copilot-sdk-workshop
 You work **directly inside the repository**. There is no copy step: you change into the starter
 directory for your language and stay there for the whole workshop. That means you are editing
 tracked repository files, so your changes show up in `git status`. That is expected. If you want a
-clean starter again, run `git checkout -- .` from the repository root to discard your edits.
+clean learner file again, inspect `git status --short` and `git diff` first. Back up your
+learner-authored files, including untracked practice files, outside the repository and check the
+backup. From the repository root, restore only the intended tracked file with
+`git restore --source=HEAD -- <exact-file-path>`, replacing the placeholder with its actual path.
+That discards edits to that named file. Do not restore a whole directory, reset the repository,
+or remove untracked files: the other workshop and unrelated work must remain intact.
 
 ## 2. Authenticate Copilot
 
@@ -230,6 +256,7 @@ dotnet build
 
 A successful build ends with:
 
+<!-- code-id: 00-preflight-dotnet-2 -->
 ```text
 Build succeeded.
     0 Warning(s)
@@ -241,6 +268,7 @@ this folder, enter `code .` to open it in VS Code, or open the folder in your fa
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-dotnet-3 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -297,6 +325,7 @@ this folder, enter `code .` to open it in VS Code, or open the folder in your fa
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-nodejs-2 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -376,6 +405,7 @@ python -m copilot download-runtime
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-python-2 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -433,6 +463,7 @@ this folder, enter `code .` to open it in VS Code, or open the folder in your fa
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-go-2 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -494,6 +525,7 @@ this folder, enter `code .` to open it in VS Code, or open the folder in your fa
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-rust-2 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -540,6 +572,7 @@ mvn compile
 
 A successful compile ends with:
 
+<!-- code-id: 00-preflight-java-2 -->
 ```text
 [INFO] BUILD SUCCESS
 ```
@@ -552,6 +585,7 @@ this folder, enter `code .` to open it in VS Code, or open the folder in your fa
 
 Open the controlled target page once to make sure you can reach it:
 
+<!-- code-id: 00-preflight-java-3 -->
 ```text
 {{TARGET_APP_URL}}
 ```

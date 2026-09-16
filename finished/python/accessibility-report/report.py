@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from copilot import CopilotClient
@@ -14,7 +15,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
+        async with await client.create_session(working_directory=str(Path.cwd()), streaming=True, on_permission_request=permission_for_target(target), tools=[accessibility_rule_lookup, create_snapshot_reader(".")], available_tools=["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"], mcp_servers={"playwright": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"], "working_directory": ".", "tools": ["browser_navigate"]}}) as session:
             done = asyncio.Event()
             error: RuntimeError | None = None
             received_delta = False
@@ -24,17 +25,23 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name): print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success): print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData(): done.set()
-            session.on(on_event)
-            await session.send(report_prompt(target))
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(report_prompt(target))
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 

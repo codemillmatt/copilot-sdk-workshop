@@ -27,8 +27,10 @@ dotnet build finished/dotnet/museum-exhibit-studio
 ## What the sample teaches
 
 The generation session allowlists exactly one application-owned tool,
-`approved_fact_lookup`, and uses a replace-mode system message, so the model can only write exhibit
-text from facts this application handed it. `CuratorFacts.CreateApprovedFactLookup` bounds those
+`approved_fact_lookup`, and denies unexpected permission requests. The tool skips permission checks
+because it only returns application-owned data. The replace-mode system message asks the model to
+use only those facts; that guidance does not guarantee factual accuracy.
+`CuratorFacts.CreateApprovedFactLookup` bounds those
 facts before the model can ever see them, `CuratorFacts.BoundFacts` trims and validates facts before
 every generation or research send, and `CuratorStreamer.StreamExhibitAsync` streams
 model output with explicit timeouts.
@@ -36,8 +38,10 @@ model output with explicit timeouts.
 Optional Wikipedia research is intentionally lightweight: a separate session exposes only scoped
 `search` and `readArticle` MCP tools through `CuratorSafety.WikipediaPermissionHandler`. The model
 writes prose notes and a trailing `## Sources` list. The app extracts cited source titles and URLs
-for display after the exhibit; research notes are background only and are never merged into the
-approved facts.
+for display after the exhibit as **Model-reported Wikipedia sources (unverified):**; research notes
+are background only and are never merged into the approved facts. Verify each URL, article, and
+supporting claim yourself: parsed links do not prove that articles exist or were consulted.
+Successful research without parseable citations produces an explicit notice.
 
 After generation, deterministic validation checks the title, `## Narrative`, 100-140 word narrative
 length, `## Visitor questions`, exactly three numbered questions, question marks, and prohibited
@@ -46,7 +50,12 @@ required.
 
 The optional capstone creates `exhibit.html` with `builtin:apply_patch`.
 `CuratorSafety.ExhibitWritePermission` allows only that single file in the application working
-directory and rejects every other write, shell, or MCP request.
+directory and rejects every other write, shell, or MCP request. Before that session,
+`CuratorSafety.CaptureArtifactState` records the content hash. `VerifyArtifactUpdate` confirms only
+a newly created or content-changed, nonempty regular nonsymlink file. Missing, empty, unchanged,
+directory, or symlink output cannot claim success; previous files are not deleted to force a write.
+This verification does not prove historical accuracy, HTML safety, accessibility, or absence of
+external assets. Inspect the source and review the page manually.
 
 ## Manual check
 

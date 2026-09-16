@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 
@@ -39,7 +40,7 @@ public static class CuratorSafety
     public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> WikipediaPermissionHandler() =>
         (request, _) =>
         {
-            var decision = request is PermissionRequestMcp { ServerName: "wikipedia" } wikipedia &&
+            var decision = request is PermissionRequestMcp { ServerName: "wikipedia", ManagedApprovalRequired: not true } wikipedia &&
                            AllowedWikipediaToolNames.Contains(wikipedia.ToolName)
                 ? PermissionDecision.ApproveOnce()
                 : PermissionDecision.Reject(
@@ -48,6 +49,7 @@ public static class CuratorSafety
             return Task.FromResult(decision);
         };
 
+    // Parses model-written links, not evidence that an article exists or was consulted.
     public static ExtractedSources ExtractSources(string content)
     {
         if (string.IsNullOrEmpty(content))
@@ -106,7 +108,7 @@ public static class CuratorSafety
 
         return (request, _) =>
         {
-            var decision = request is PermissionRequestWrite write &&
+            var decision = request is PermissionRequestWrite { ManagedApprovalRequired: not true, RequestSandboxBypass: not true } write &&
                            IsAllowedExhibitPath(write.FileName, normalizedWorkingDirectory, allowedPath)
                 ? PermissionDecision.ApproveOnce()
                 : PermissionDecision.Reject(
@@ -126,11 +128,82 @@ public static class CuratorSafety
             return false;
         }
 
-        var requestedPath = Path.IsPathRooted(fileName)
-            ? Path.GetFullPath(fileName)
-            : Path.GetFullPath(Path.Combine(workingDirectory, fileName));
+        try
+        {
+            var requestedPath = Path.GetFullPath(fileName, workingDirectory);
+            return requestedPath.Equals(allowedPath, OperatingSystem.IsWindows()
+                       ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+                   new FileInfo(allowedPath).LinkTarget is null &&
+                   !Directory.Exists(allowedPath);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
-        return requestedPath.Equals(allowedPath, StringComparison.OrdinalIgnoreCase);
+    public sealed class ArtifactState
+    {
+        internal string FullPath { get; }
+        internal byte[]? Hash { get; }
+
+        internal ArtifactState(string fullPath, byte[]? hash)
+        {
+            FullPath = fullPath;
+            Hash = hash;
+        }
+    }
+
+    public static ArtifactState CaptureArtifactState(string workingDirectory, string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        if (fileName is "." or ".." || fileName.IndexOfAny(['/', '\\']) >= 0 || Path.IsPathRooted(fileName))
+        {
+            throw new ArgumentException("Specify a single file name in the working directory.", nameof(fileName));
+        }
+        if (!Directory.Exists(workingDirectory))
+        {
+            throw new DirectoryNotFoundException("The artifact working directory must exist.");
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(workingDirectory, fileName));
+        return new ArtifactState(fullPath, ReadArtifactHash(fullPath, requireNonempty: false));
+    }
+
+    public static void VerifyArtifactUpdate(ArtifactState snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var hash = ReadArtifactHash(snapshot.FullPath, requireNonempty: true);
+        if (hash is null || (snapshot.Hash is not null && hash.AsSpan().SequenceEqual(snapshot.Hash)))
+        {
+            throw new InvalidOperationException("No output update was verified.");
+        }
+    }
+
+    private static byte[]? ReadArtifactHash(string path, bool requireNonempty)
+    {
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+
+        if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint | FileAttributes.Device)) != 0)
+        {
+            throw new InvalidOperationException("No output update was verified. The target must be a regular nonsymlink file.");
+        }
+
+        using var stream = File.OpenRead(path);
+        if (!stream.CanSeek || (requireNonempty && stream.Length == 0))
+        {
+            throw new InvalidOperationException("No output update was verified. The target must be a nonempty regular file.");
+        }
+        return SHA256.HashData(stream);
     }
 }
 

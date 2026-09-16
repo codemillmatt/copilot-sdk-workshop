@@ -1,6 +1,6 @@
 # Step 5: Combine local and MCP tools
 
-> **Time:** 15 minutes
+> **Pace:** Self-paced
 
 ## What you'll orchestrate
 
@@ -9,14 +9,17 @@ remediation guidance from the local WCAG catalog.
 
 ## Let the agent choose the right tool
 
-**Agent orchestration** is the model choosing and sequencing capabilities to complete a goal. Your
-session exposes two different tools through one interface:
+The runtime coordinates model requests and tool execution. Your application fixes the available
+capabilities, data, and permission policy; the model proposes which tools to call and in what order.
+This session exposes three tools through the same event interface:
 
 - Playwright discovers facts about the live page.
+- The narrow local reader returns the browser's current-run snapshot.
 - The application-owned catalog explains a matching criterion and remediation.
 
-Both tools report through tool-start and tool-completion events. Your application can observe the
-work without knowing how either tool is implemented.
+All three report through tool-start and tool-completion events. You can observe the flow without
+implementing browser automation. The reader enforces a real ordering constraint: it cannot return
+a current-run snapshot until one exists. Other ordering in the prompt is requested, not enforced.
 
 ## Keep evidence and guidance in their lanes
 
@@ -34,6 +37,7 @@ The flow is now `URL -> Playwright evidence -> WCAG catalog lookup -> grounded r
 Remove the command-line argument validation from Step 4. After the banner and before creating the
 client, insert:
 
+<!-- code-id: 05-combine-tools-dotnet-1 -->
 ```csharp
 Console.Write("Enter URL to analyze: ");
 var urlInput = Console.ReadLine()?.Trim();
@@ -65,6 +69,7 @@ The Step 4 handler receives this validated `targetUri`, so the URL boundary stil
 Keep the combined local tools, MCP server, allowlist, and permission handler from Step 4. Replace
 the final prompt:
 
+<!-- code-id: 05-combine-tools-dotnet-2 -->
 ```csharp
 Console.WriteLine($"\nAnalyzing: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(
@@ -88,6 +93,7 @@ catalog lookups to the agent.
 In `src/index.ts`, keep the Step 4 helpers and the combined session that registers both
 local tools plus Playwright MCP:
 
+<!-- code-id: 05-combine-tools-nodejs-1 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, createSnapshotReader, permissionForTarget, streamResponse } from "./workshop.js";
@@ -97,9 +103,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true,
     onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
@@ -112,6 +119,7 @@ try {
 
 Replace the final send call so the agent must navigate, read the snapshot, and call the catalog:
 
+<!-- code-id: 05-combine-tools-nodejs-2 -->
 ```typescript
   try {
     await streamResponse(session, `Open ${target.href}, read the snapshot, then use accessibility_rule_lookup to recommend one evidence-backed fix.`);
@@ -129,8 +137,10 @@ Replace the final send call so the agent must navigate, read the snapshot, and c
 In `main.py`, keep the Step 4 helpers and the combined session that registers both
 local tools plus Playwright MCP:
 
+<!-- code-id: 05-combine-tools-python-1 -->
 ```python
 import asyncio
+from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
@@ -147,7 +157,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(working_directory=str(Path.cwd()),
             streaming=True,
             on_permission_request=permission_for_target(target),
             tools=[accessibility_rule_lookup, create_snapshot_reader(".")],
@@ -161,6 +171,7 @@ async def main() -> None:
 Keep the Step 2/4 event handler inside the session block and add tool lifecycle branches so the
 run shows both local and MCP tool activity. Then replace the prompt passed to `session.send`:
 
+<!-- code-id: 05-combine-tools-python-2 -->
 ```python
             done = asyncio.Event()
             error: RuntimeError | None = None
@@ -172,8 +183,10 @@ run shows both local and MCP tool activity. Then replace the prompt passed to `s
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name):
                         print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success):
@@ -184,9 +197,13 @@ run shows both local and MCP tool activity. Then replace the prompt passed to `s
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send(f"Open {target}, read the snapshot, then use accessibility_rule_lookup for one evidence-backed recommendation.")
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(f"Open {target}, read the snapshot, then use accessibility_rule_lookup for one evidence-backed recommendation.")
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -201,53 +218,57 @@ if __name__ == "__main__":
 In `main.go`, keep the three-tool session from Step 4: local lookup, snapshot reader,
 Playwright MCP, allowlist, and exact-target permission handler:
 
-```go
-	workingDirectory, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
-	lookup.SkipPermission = true
-	readSnapshot := copilot.DefineTool("read_latest_accessibility_snapshot", "Reads the newest Playwright accessibility snapshot created during this run.", snapshotReader(workingDirectory))
-	readSnapshot.SkipPermission = true
+Inside `run`, replace from `workingDirectory, err := os.Getwd()` through the final send with this setup and the following send fragment. Keep the final `return nil` and function brace; do not retain a duplicate client/session block.
 
-	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
-	if err := client.Start(context.Background()); err != nil {
-		panic(err)
-	}
-	defer client.Stop()
-	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
-		Streaming:           copilot.Bool(true),
-		Tools:               []copilot.Tool{lookup, readSnapshot},
-		AvailableTools:      []string{"accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"},
-		OnPermissionRequest: permissionForTarget(target),
-		MCPServers: map[string]copilot.MCPServerConfig{
-			"playwright": copilot.MCPStdioServerConfig{
-				Command:          "npx",
-				Args:             []string{"-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"},
-				WorkingDirectory: workingDirectory,
-				Tools:            []string{"browser_navigate"},
-			},
+<!-- code-id: 05-combine-tools-go-1 -->
+```go
+workingDirectory, err := os.Getwd()
+if err != nil {
+	return err
+}
+lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
+lookup.SkipPermission = true
+readSnapshot := copilot.DefineTool("read_latest_accessibility_snapshot", "Reads the newest Playwright accessibility snapshot created during this run.", snapshotReader(workingDirectory))
+readSnapshot.SkipPermission = true
+
+client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+defer func() { err = errors.Join(err, client.Stop()) }()
+if err := client.Start(context.Background()); err != nil {
+	return err
+}
+session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
+	Streaming:           copilot.Bool(true),
+	Tools:               []copilot.Tool{lookup, readSnapshot},
+	AvailableTools:      []string{"accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"},
+	OnPermissionRequest: permissionForTarget(target),
+	MCPServers: map[string]copilot.MCPServerConfig{
+		"playwright": copilot.MCPStdioServerConfig{
+			Command:          "npx",
+			Args:             []string{"-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"},
+			WorkingDirectory: workingDirectory,
+			Tools:            []string{"browser_navigate"},
 		},
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer session.Disconnect()
+	},
+})
+if err != nil {
+	return err
+}
+defer func() { err = errors.Join(err, session.Disconnect()) }()
 ```
 
 ### 2. Give the agent a three-tool goal
 
 Replace the final prompt so the agent must navigate, read the snapshot, and call the catalog:
 
+<!-- code-id: 05-combine-tools-go-2 -->
 ```go
-	prompt := fmt.Sprintf(
-		"Use browser_navigate to open %s, read_latest_accessibility_snapshot for evidence, then call accessibility_rule_lookup before recommending one evidence-backed fix.",
-		target,
-	)
-	if err := streamResponse(session, prompt); err != nil {
-		panic(err)
-	}
+prompt := fmt.Sprintf(
+	"Use browser_navigate to open %s, read_latest_accessibility_snapshot for evidence, then call accessibility_rule_lookup before recommending one evidence-backed fix.",
+	target,
+)
+if err := streamResponse(session, prompt); err != nil {
+	return err
+}
 ```
 :::
 :::language rust
@@ -256,6 +277,9 @@ Replace the final prompt so the agent must navigate, read the snapshot, and call
 In `src/main.rs`, keep the three-tool session from Step 4: local lookup, snapshot
 reader, Playwright MCP, allowlist, and exact-target permission handler:
 
+Inside `main`, replace from `let working_directory = std::env::current_dir()?;` through the end of the function body using this setup and the following send/cleanup fragment. Keep only one closing function brace after the final `result`.
+
+<!-- code-id: 05-combine-tools-rust-1 -->
 ```rust
     let working_directory = std::env::current_dir()?;
     let lookup = Tool::new("accessibility_rule_lookup")
@@ -308,6 +332,7 @@ reader, Playwright MCP, allowlist, and exact-target permission handler:
 
 Add or replace the prompt helper, then pass it to the streamer:
 
+<!-- code-id: 05-combine-tools-rust-2 -->
 ```rust
 fn combined_tools_prompt(target: &Url) -> String {
     format!(
@@ -320,13 +345,39 @@ fn combined_tools_prompt(target: &Url) -> String {
 }
 ```
 
+<!-- code-id: 05-combine-tools-rust-3 -->
 ```rust
-    let client = Client::start(ClientOptions::default()).await?;
+let client = Client::start(ClientOptions::default()).await?;
+let result = async {
     let session = client.create_session(config).await?;
-    stream_response!(session, combined_tools_prompt(&target));
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        stream_response!(session, combined_tools_prompt(&target));
+        Ok::<(), Box<dyn std::error::Error>>(())
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+    })
+    .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+    .and_then(|result| result);
+    let cleanup = session.disconnect().await;
+    if let Err(error) = cleanup {
+        if response_result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Session cleanup also failed: {error}");
+    }
+    response_result
+}
+.await;
+let cleanup = client.stop().await;
+if let Err(error) = cleanup {
+    if result.is_ok() {
+        return Err(Box::new(error) as Box<dyn std::error::Error>);
+    }
+    eprintln!("Client cleanup also failed: {error}");
+}
+result
 ```
 :::
 :::language java
@@ -334,19 +385,13 @@ fn combined_tools_prompt(target: &Url) -> String {
 
 In `src/main/java/workshop/AccessibilityReport.java`, keep the three-tool session from
 Step 4: local lookup, snapshot reader, Playwright MCP, allowlist, and exact-target permission
-handler. Keep its default fail-closed policy and its optional `--allow-local-demo-mcp` fallback for
-the controlled workshop target while [github/copilot-sdk#2273](https://github.com/github/copilot-sdk/issues/2273)
-prevents the SDK from exposing exact MCP request fields:
+handler. Preserve `WorkshopPermissionHandler.createForTarget(target)` and the explicit
+three-tool allowlist. Its missing-field and nonmatching-target paths remain denied:
 
+<!-- code-id: 05-combine-tools-java-1 -->
 ```java
-        RunOptions options = parseRunOptions(args);
-        URI target = options.target();
+        URI target = parseTargetArgument(args);
         Path workingDirectory = Path.of("").toAbsolutePath().normalize();
-        if (options.allowLocalDemoMcp()) {
-            System.err.println("WARNING: Local demo fallback enabled. MCP request payload fields are unavailable, "
-                    + "so this run approves only the mcp permission kind, not an exact target. "
-                    + "Use only with the controlled workshop target.");
-        }
         var lookup = ToolDefinition.from(
                 "accessibility_rule_lookup",
                 "Looks up read-only WCAG guidance maintained by this application.",
@@ -369,28 +414,14 @@ prevents the SDK from exposing exact MCP request fields:
                         .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                         .setWorkingDirectory(workingDirectory.toString())
                         .setTools(List.of("browser_navigate"))))
-                .setOnPermissionRequest((request, ignored) -> {
-                    if ("mcp".equals(request.getKind())
-                            && isExactNavigation(request.getExtensionData(), target)) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.reject(
-                                    "This workshop allows Playwright to navigate only to the exact requested target. "
-                                            + "MCP requests without target data remain denied unless the explicit "
-                                            + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-                });
+                .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 ```
 
 ### 2. Give the agent a three-tool goal
 
 Add or replace the prompt helper, then send it:
 
+<!-- code-id: 05-combine-tools-java-2 -->
 ```java
     private static String combinedToolsPrompt(URI target) {
         return """
@@ -402,15 +433,13 @@ Add or replace the prompt helper, then send it:
     }
 ```
 
+<!-- code-id: 05-combine-tools-java-3 -->
 ```java
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(config).get();
-            var response = session.sendAndWait(new MessageOptions().setPrompt(combinedToolsPrompt(target))).get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            try (var session = client.createSession(config).get()) {
+                ResponseStreamer.sendAndPrint(session, combinedToolsPrompt(target));
             }
-            System.out.println(response.getData().content());
         }
 ```
 :::
@@ -423,6 +452,7 @@ dotnet run
 
 Paste this URL when prompted:
 
+<!-- code-id: 05-combine-tools-dotnet-3 -->
 ```text
 {{TARGET_APP_URL}}
 ```
@@ -449,12 +479,13 @@ cargo run -- "{{TARGET_APP_URL}}"
 :::
 :::language java
 ```bash
-mvn compile exec:java -Dexec.args="--allow-local-demo-mcp {{TARGET_APP_URL}}"
+mvn compile exec:java -Dexec.args="{{TARGET_APP_URL}}"
 ```
 :::
 
 You should see activity from both kinds of tool:
 
+<!-- code-id: 05-combine-tools-shared-1 -->
 ```text
 [tool:start] playwright-browser_navigate
 [tool:start] read_latest_accessibility_snapshot
@@ -501,6 +532,7 @@ source-of-truth criterion and remediation.
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-dotnet-4 -->
 ```csharp
 using GitHub.Copilot;
 using HelloCopilotSDK.Helpers;
@@ -536,8 +568,9 @@ Console.WriteLine($"\nConnected to the Copilot runtime: {ping.Message}\n");
 
 var workingDirectory = Directory.GetCurrentDirectory();
 
-await using var session = await client.CreateSessionAsync(new SessionConfig
+var config = new SessionConfig
 {
+    WorkingDirectory = workingDirectory,
     Streaming = true,
     OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),
     Tools =
@@ -561,7 +594,9 @@ await using var session = await client.CreateSessionAsync(new SessionConfig
             Tools = ["browser_navigate"]
         }
     }
-});
+};
+
+await using var session = await client.CreateSessionAsync(config);
 
 Console.WriteLine($"Analyzing: {targetUri.AbsoluteUri}\n");
 await ResponseStreamer.SendAndPrintAsync(
@@ -584,6 +619,7 @@ await ResponseStreamer.SendAndPrintAsync(
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-nodejs-3 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, createSnapshotReader, permissionForTarget, streamResponse } from "./workshop.js";
@@ -593,9 +629,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true,
     onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
@@ -620,8 +657,10 @@ try {
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-python-3 -->
 ```python
 import asyncio
+from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
@@ -638,7 +677,7 @@ async def main() -> None:
     if urlsplit(target).scheme not in {"http", "https"}:
         raise ValueError("Enter an absolute HTTP or HTTPS URL.")
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(working_directory=str(Path.cwd()),
             streaming=True,
             on_permission_request=permission_for_target(target),
             tools=[accessibility_rule_lookup, create_snapshot_reader(".")],
@@ -655,8 +694,10 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
                     case ToolExecutionStartData(tool_name=name):
                         print(f"\n[tool:start] {name}")
                     case ToolExecutionCompleteData(success=success):
@@ -667,9 +708,13 @@ async def main() -> None:
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send(f"Open {target}, read the snapshot, then use accessibility_rule_lookup for one evidence-backed recommendation.")
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send(f"Open {target}, read the snapshot, then use accessibility_rule_lookup for one evidence-backed recommendation.")
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -686,18 +731,21 @@ if __name__ == "__main__":
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-go-3 -->
 ```go
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	copilot "github.com/github/copilot-sdk/go"
@@ -796,28 +844,38 @@ func permissionForTarget(target string) copilot.PermissionHandlerFunc {
 }
 
 func streamResponse(session *copilot.Session, prompt string) error {
-	receivedDelta := false
+	var receivedDelta atomic.Bool
 	unsubscribe := session.On(func(event copilot.SessionEvent) {
-		if delta, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
-			receivedDelta = true
+		if delta, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok && delta.DeltaContent != "" {
+			receivedDelta.Store(true)
 			fmt.Print(delta.DeltaContent)
 		}
 	})
 	defer unsubscribe()
+
 	response, err := session.SendAndWait(context.Background(), copilot.MessageOptions{Prompt: prompt})
-	if err == nil && !receivedDelta && response != nil {
+	if err != nil {
+		return err
+	}
+	if !receivedDelta.Load() && response != nil {
 		if message, ok := response.Data.(*copilot.AssistantMessageData); ok {
 			fmt.Print(message.Content)
 		}
 	}
 	fmt.Println()
-	return err
+	return nil
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "Usage: go run . <http-or-https-url>")
-		return
+		return fmt.Errorf("Usage: go run . <http-or-https-url>")
 	}
 	target := os.Args[1]
 	if !strings.Contains(target, "://") {
@@ -825,13 +883,12 @@ func main() {
 	}
 	parsed, err := url.ParseRequestURI(target)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		fmt.Fprintln(os.Stderr, "Enter an absolute HTTP or HTTPS URL.")
-		return
+		return fmt.Errorf("Enter an absolute HTTP or HTTPS URL.")
 	}
 
 	workingDirectory, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	lookup := copilot.DefineTool("accessibility_rule_lookup", "Looks up read-only WCAG guidance maintained by this application.", accessibilityRuleLookup)
 	lookup.SkipPermission = true
@@ -839,10 +896,10 @@ func main() {
 	readSnapshot.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
 		Streaming:           copilot.Bool(true),
 		Tools:               []copilot.Tool{lookup, readSnapshot},
@@ -858,16 +915,17 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 	prompt := fmt.Sprintf(
 		"Use browser_navigate to open %s, read_latest_accessibility_snapshot for evidence, then call accessibility_rule_lookup before recommending one evidence-backed fix.",
 		target,
 	)
 	if err := streamResponse(session, prompt); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 </details>
@@ -879,6 +937,7 @@ func main() {
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-rust-4 -->
 ```rust
 use std::collections::HashSet;
 use std::io::{self, Write};
@@ -1131,6 +1190,16 @@ impl PermissionHandler for ScopedPermissions {
         request: PermissionRequestData,
     ) -> PermissionResult {
         let payload = permission_payload(&request.extra);
+        let kind_allowed = if request.extra.get("permissionRequest").is_some() {
+            payload
+                .and_then(|payload| payload.get("kind"))
+                .and_then(serde_json::Value::as_str)
+                == Some("mcp")
+                && (request.kind.is_none()
+                    || request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Mcp))
+        } else {
+            request.kind == Some(github_copilot_sdk::types::PermissionRequestKind::Mcp)
+        };
         let server = payload
             .and_then(|payload| payload.get("serverName"))
             .and_then(serde_json::Value::as_str);
@@ -1142,7 +1211,8 @@ impl PermissionHandler for ScopedPermissions {
             .and_then(|args| args.get("url"))
             .and_then(serde_json::Value::as_str)
             .and_then(|value| Url::parse(value).ok());
-        if server == Some("playwright")
+        if kind_allowed
+            && server == Some("playwright")
             && matches!(
                 tool,
                 Some("browser_navigate" | "playwright-browser_navigate")
@@ -1247,11 +1317,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(config).await?;
-    stream_response!(session, combined_tools_prompt(&target));
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(session, combined_tools_prompt(&target));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+        })
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 </details>
@@ -1266,6 +1361,7 @@ Step 3 used one criterion to focus on local-tool wiring. Before asking the model
 browser-observable issue, replace `lookupRule` with this application-owned catalog and add the
 `Rule` record before `SnapshotReader`:
 
+<!-- code-id: 05-combine-tools-java-4 -->
 ```java
 private static String lookupRule(String query) {
     String normalized = query.trim().toLowerCase(java.util.Locale.ROOT);
@@ -1307,6 +1403,7 @@ bounded source of truth.
 
 Compare your work with this complete Step 5 implementation.
 
+<!-- code-id: 05-combine-tools-java-5 -->
 ```java
 package workshop;
 
@@ -1335,14 +1432,12 @@ import java.util.stream.Stream;
 
 public final class AccessibilityReport {
     private static final long MAX_SNAPSHOT_BYTES = 1_000_000;
-    private static final String LOCAL_DEMO_MCP_FLAG = "--allow-local-demo-mcp";
 
     private AccessibilityReport() {
     }
 
     public static void main(String[] args) throws Exception {
-        RunOptions options = parseRunOptions(args);
-        URI target = options.target();
+        URI target = parseTargetArgument(args);
         Path workingDirectory = Path.of("").toAbsolutePath().normalize();
         var lookup = ToolDefinition.from(
                 "accessibility_rule_lookup",
@@ -1366,31 +1461,13 @@ public final class AccessibilityReport {
                         .setArgs(List.of("-y", "@playwright/mcp@0.0.78", "--browser=msedge", "--output-dir", ".playwright-mcp", "--output-mode", "file"))
                         .setWorkingDirectory(workingDirectory.toString())
                         .setTools(List.of("browser_navigate"))))
-                .setOnPermissionRequest((request, ignored) -> {
-                    if ("mcp".equals(request.getKind())
-                            && isExactNavigation(request.getExtensionData(), target)) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    if (options.allowLocalDemoMcp() && "mcp".equals(request.getKind())) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(
-                                PermissionRequestResult.approveOnce());
-                    }
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                            PermissionRequestResult.reject(
-                                    "This workshop allows Playwright to navigate only to the exact requested target. "
-                                            + "MCP requests without target data remain denied unless the explicit "
-                                            + LOCAL_DEMO_MCP_FLAG + " local-demo fallback is enabled."));
-                });
+                .setOnPermissionRequest(WorkshopPermissionHandler.createForTarget(target));
 
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(config).get();
-            var response = session.sendAndWait(new MessageOptions().setPrompt(combinedToolsPrompt(target))).get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            try (var session = client.createSession(config).get()) {
+                ResponseStreamer.sendAndPrint(session, combinedToolsPrompt(target));
             }
-            System.out.println(response.getData().content());
         }
     }
 
@@ -1405,64 +1482,21 @@ public final class AccessibilityReport {
         return target;
     }
 
-    private static RunOptions parseRunOptions(String[] args) throws URISyntaxException {
-        boolean allowLocalDemoMcp = false;
-        String target = null;
-        for (String arg : args) {
-            if (LOCAL_DEMO_MCP_FLAG.equals(arg)) {
-                if (allowLocalDemoMcp) {
-                    throw new IllegalArgumentException("Specify " + LOCAL_DEMO_MCP_FLAG + " at most once.");
-                }
-                allowLocalDemoMcp = true;
-            } else if (target == null) {
-                target = arg;
-            } else {
-                throw new IllegalArgumentException(usage());
-            }
+    private static URI parseTargetArgument(String[] args) throws URISyntaxException {
+        if (args.length != 1) {
+            throw new IllegalArgumentException(
+                    "Usage: mvn compile exec:java -Dexec.args=\"<http-or-https-url>\"");
         }
-        if (target == null) {
-            throw new IllegalArgumentException(usage());
-        }
-        return new RunOptions(parseTarget(target), allowLocalDemoMcp);
+        return parseTarget(args[0]);
     }
 
-    private static String usage() {
-        return "Usage: mvn compile exec:java -Dexec.args=\"["
-                + LOCAL_DEMO_MCP_FLAG + "] <http-or-https-url>\"";
-    }
 
-    private record RunOptions(URI target, boolean allowLocalDemoMcp) {
-    }
 
-    private static boolean isExactNavigation(Map<String, Object> request, URI target) {
-        if (request == null
-                || !"playwright".equals(request.get("serverName"))
-                || !(request.get("toolName") instanceof String toolName)
-                || !("browser_navigate".equals(toolName) || "playwright-browser_navigate".equals(toolName))
-                || !(request.get("args") instanceof Map<?, ?> args)
-                || !(args.get("url") instanceof String requested)) {
-            return false;
-        }
-        try {
-            return sameUrl(new URI(requested), target);
-        } catch (URISyntaxException ignored) {
-            return false;
-        }
-    }
 
-    private static boolean sameUrl(URI requested, URI allowed) {
-        return equalsIgnoreCase(requested.getScheme(), allowed.getScheme())
-                && equalsIgnoreCase(requested.getHost(), allowed.getHost())
-                && requested.getPort() == allowed.getPort()
-                && java.util.Objects.equals(requested.getRawUserInfo(), allowed.getRawUserInfo())
-                && java.util.Objects.equals(requested.getRawPath(), allowed.getRawPath())
-                && java.util.Objects.equals(requested.getRawQuery(), allowed.getRawQuery())
-                && java.util.Objects.equals(requested.getRawFragment(), allowed.getRawFragment());
-    }
 
-    private static boolean equalsIgnoreCase(String left, String right) {
-        return left == null ? right == null : right != null && left.equalsIgnoreCase(right);
-    }
+
+
+
 
     private static String lookupRule(String query) {
         String normalized = query.trim().toLowerCase(java.util.Locale.ROOT);

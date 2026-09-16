@@ -1,10 +1,7 @@
 package workshop;
 
 import com.github.copilot.CopilotClient;
-import com.github.copilot.generated.AssistantMessageDeltaEvent;
-import com.github.copilot.generated.AssistantMessageEvent;
-import com.github.copilot.rpc.MessageOptions;
-import com.github.copilot.rpc.PermissionHandler;
+import com.github.copilot.rpc.PermissionRequestResult;
 import com.github.copilot.rpc.SessionConfig;
 import com.github.copilot.rpc.ToolDefinition;
 import com.github.copilot.tool.Param;
@@ -12,7 +9,7 @@ import com.github.copilot.tool.Param;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletableFuture;
 
 public final class AccessibilityGuidance {
     private AccessibilityGuidance() {
@@ -34,30 +31,15 @@ public final class AccessibilityGuidance {
                 .setStreaming(true)
                 .setTools(List.of(lookup))
                 .setAvailableTools(List.of("accessibility_rule_lookup"))
-                .setOnPermissionRequest(PermissionHandler.APPROVE_ALL);
+                .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("Only the permission-free accessibility lookup is allowed.")));
 
         try (var client = new CopilotClient()) {
             client.start().get();
             try (var session = client.createSession(config).get()) {
-                var receivedDelta = new AtomicBoolean(false);
-                try (var deltaSubscription = session.on(AssistantMessageDeltaEvent.class, event -> {
-                    String delta = event.getData().deltaContent();
-                    if (delta != null && !delta.isEmpty()) {
-                        receivedDelta.set(true);
-                        System.out.print(delta);
-                    }
-                }); var messageSubscription = session.on(AssistantMessageEvent.class, event -> {
-                    String content = event.getData().content();
-                    if (!receivedDelta.get() && content != null && !content.isEmpty()) {
-                        System.out.print(content);
-                    }
-                })) {
-                    System.out.println("\nCopilot:");
-                    session.sendAndWait(new MessageOptions()
-                            .setPrompt("Use accessibility_rule_lookup to answer this question: " + question))
-                            .get();
-                    System.out.println();
-                }
+                System.out.println("\nCopilot:");
+                ResponseStreamer.sendAndPrint(
+                        session, "Use accessibility_rule_lookup to answer this question: " + question);
             }
         }
     }

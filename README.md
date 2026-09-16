@@ -16,8 +16,8 @@ Across the workshops, you'll:
 4. Enforce capability, input, timeout, validation, and lifecycle boundaries in application code.
 5. Explain what the model can infer and what the application must prove.
 
-Plan on about 90 minutes for Accessibility Reviewer or 90 minutes for Museum Exhibit Studio.
-Machine setup happens separately in an untimed preflight for each workshop.
+Both workshops are self-paced. Complete the checks and short exercises before moving on;
+machine setup happens separately in each workshop's preflight. No measured completion time is claimed.
 
 ## Start the workshop
 
@@ -38,18 +38,44 @@ the Markdown requests used by the lesson viewer.
 
 ## Prerequisites
 
+Install the runtime for **your selected language**, not every runtime below. Both tracks also
+need an authenticated Copilot CLI. The accessibility browser lesson and museum Wikipedia lesson
+use Node.js/npm to start their MCP servers, even when the application uses another language.
+
 - [.NET 10 SDK](https://learn.microsoft.com/dotnet/core/install/)
-- [Node.js 22 or newer](https://nodejs.org/)
+- [Node.js 22.12 or newer](https://nodejs.org/)
 - [Python 3.11 or newer](https://www.python.org/downloads/)
 - [Go 1.24 or newer](https://go.dev/dl/)
 - [Rust 1.94 or newer](https://rustup.rs/)
 - [Java 17 or newer](https://adoptium.net/) and [Maven](https://maven.apache.org/install.html)
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
 - GitHub Copilot subscription or trial
-- Microsoft Edge (the workshop default) or Google Chrome
+- Microsoft Edge (the accessibility workshop default) or Google Chrome for browser inspection
 
 Preflight walks through installation checks, authentication, OS-specific commands, expected
 output, and troubleshooting.
+
+Prompts and tool results are sent to the configured model service. Requests can consume your
+account's usage allowance. Use the public sample data, not private pages, credentials, or
+confidential facts. A local tool runs locally; its returned text can still leave the machine.
+
+## Run a completed sample
+
+For museum quickstarts, open `finished/<language>/museum-exhibit-studio/README.md`.
+For the accessibility reporter, change into `finished/<language>/accessibility-report` and run
+the restore command, then the launch command below. Replace `TARGET_URL` with the controlled
+target URL shown by the workshop site; .NET asks for that URL interactively. These samples do
+not require editing a starter or completing the workshop first.
+
+| Language | Restore | Launch |
+| --- | --- | --- |
+| .NET | `dotnet restore` | `dotnet run` |
+| Node.js | `npm ci --ignore-scripts --no-audit --fund=false` | `npm start -- "TARGET_URL"` |
+| Python (Bash) | `python3 -m venv .venv`, then `.venv/bin/python -m pip install -r requirements.txt` | `.venv/bin/python main.py "TARGET_URL"` |
+| Python (PowerShell) | `py -3 -m venv .venv`, then `.venv/Scripts/python.exe -m pip install -r requirements.txt` | `.venv/Scripts/python.exe main.py "TARGET_URL"` |
+| Go | `go mod download` | `go run . "TARGET_URL"` |
+| Rust | `cargo fetch --locked` | `cargo run --locked -- "TARGET_URL"` |
+| Java | `mvn dependency:go-offline` | `mvn compile exec:java -Dexec.args="TARGET_URL"` |
 
 ## Repository layout
 
@@ -57,6 +83,7 @@ output, and troubleshooting.
 copilot-sdk-workshop/
 |-- docs/                         GitHub Pages site and controlled target page
 |-- workshop/                     Two complete workshop tracks and optional extensions
+|-- instructor/museum/            Trainer notes and the presentation source
 |-- start-accessibility/          Accessibility Reviewer starters in all six languages
 |-- start-museum/                 Museum Exhibit Studio starters in all six languages
 |-- finished/dotnet/
@@ -82,8 +109,11 @@ bash scripts/validate-workshop.sh
 The command checks lesson structure, internal links, site behavior hooks, and project coverage.
 It then runs browser-independent language-selection tests and restores, builds, or syntax-checks every
 accessibility and museum starter, every finished project, and the Blazor target without authenticating
-Copilot, launching a browser, or sending a prompt. The museum projects ship no tests, mocks, or
-fixtures, so their targets only restore and build.
+Copilot, launching a browser, or sending a prompt. Maintainer checks under `scripts/tests/` exercise
+the deterministic contracts; learner projects still contain no test harnesses or fixtures.
+Checkpoint replay uses canonical lesson code in temporary project copies rather than overwriting
+the learner's work. It also checks complete references and both routes into the accessibility HTML
+extension. Python checkpoints are syntax- and import-checked, not statically type-checked.
 
 Pass a language ID to run one smoke-build target:
 
@@ -93,6 +123,11 @@ bash scripts/validate-workshop.sh nodejs
 
 Pull requests run content validation and all six language smoke builds as separate GitHub Actions
 jobs, so a failure identifies the affected SDK track.
+
+Code fences used by replay have stable `code-id` comments. Keep an existing ID when editing that
+example. Add or update its exact edit operations in `scripts/checkpoints/<language>.json` when the
+learner's procedure changes. Missing or ambiguous replacement anchors fail explicitly. Do not copy a
+finished application into a checkpoint recipe as a substitute for replaying the taught edits.
 
 ## Museum Exhibit Studio workshop
 
@@ -112,8 +147,10 @@ The learner-facing track begins at
 steps — first session, streaming, curator voice, approved facts, guardrails, structural checks, and
 Wikipedia MCP research — plus an optional interactive `exhibit.html` capstone.
 
-Rust checks share one Cargo target directory across all workshop projects, avoiding repeated SDK
-dependency compilation.
+Rust checks isolate build output for independent project copies. Several samples share a package
+name, so a cached binary from a different sample or a temporary test driver must not count as
+validation of the current source. Downloaded Cargo dependencies can still use the normal registry
+cache.
 
 ## Deployment
 

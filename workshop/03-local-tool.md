@@ -1,6 +1,6 @@
 # Step 3: Add application-owned knowledge
 
-> **Time:** 15 minutes
+> **Pace:** Self-paced
 
 ## What you'll add
 
@@ -16,6 +16,21 @@ the data, validation, execution, and result.
 
 In this step, you expose application-owned WCAG guidance as `accessibility_rule_lookup`, register
 that tool with the session, and explicitly make it available to the model.
+
+The description helps the model decide when the tool is useful. Its **schema** describes allowed
+arguments: here, an object containing a text `query`. The runtime can check that shape, but your
+handler still decides what the query means and what data to return.
+
+```text
+model requests { query: "4.1.2" }
+  -> tool argument check
+  -> your lookup handler searches the supplied catalog
+  -> returned criterion becomes part of the conversation
+  -> model explains that result
+```
+
+Before opening the worked implementation, predict the result for a known criterion and for a
+query absent from the catalog. An explicit no-match result is better than invented guidance.
 
 ## Bring your own source of truth
 
@@ -33,6 +48,7 @@ external MCP process in the next step will use a permission boundary instead.
 
 At the top of `Helpers/AccessibilityRuleCatalog.cs`, insert:
 
+<!-- code-id: 03-local-tool-dotnet-1 -->
 ```csharp
 using System.ComponentModel;
 using GitHub.Copilot;
@@ -41,6 +57,7 @@ using Microsoft.Extensions.AI;
 
 Inside `AccessibilityRuleCatalog`, after the existing `Rules` array, insert:
 
+<!-- code-id: 03-local-tool-dotnet-2 -->
 ```csharp
 public static AIFunction CreateLookupTool() => CopilotTool.DefineTool(
     ([Description("The accessibility issue or WCAG criterion to look up.")] string query) =>
@@ -71,8 +88,10 @@ public static AccessibilityRule Lookup(string query)
 
 ### 2. Show tool activity
 
-In `Helpers/ResponseStreamer.cs`, insert these cases before `SessionIdleEvent`:
+In `Helpers/ResponseStreamer.cs`, inspect and keep these existing cases. Step 2 already supplied
+them; inserting a second copy would cause duplicate switch cases:
 
+<!-- code-id: 03-local-tool-dotnet-3 -->
 ```csharp
 case ToolExecutionStartEvent tool:
     Console.WriteLine($"\n[tool:start] {tool.Data.ToolName}");
@@ -86,9 +105,12 @@ case ToolExecutionCompleteEvent tool:
 
 Replace the session configuration and send call in `Program.cs`:
 
+<!-- code-id: 03-local-tool-dotnet-4 -->
 ```csharp
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("Only the permission-free accessibility lookup is allowed.")),
     Streaming = true,
     Tools = [AccessibilityRuleCatalog.CreateLookupTool()],
     AvailableTools = ["accessibility_rule_lookup"]
@@ -108,6 +130,7 @@ dotnet run
 
 Look for the tool name and its mapping to 4.1.2:
 
+<!-- code-id: 03-local-tool-dotnet-5 -->
 ```text
 [tool:start] accessibility_rule_lookup
 [tool:done] success=True
@@ -133,9 +156,13 @@ Compare your version with this complete Step 3 implementation.
 
 `Program.cs`:
 
+<!-- code-id: 03-local-tool-dotnet-6 -->
 ```csharp
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using HelloCopilotSDK.Helpers;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== Application-owned WCAG guidance ===\n");
 
@@ -147,6 +174,8 @@ Console.WriteLine($"Connected to the Copilot runtime: {ping.Message}\n");
 
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("Only the permission-free accessibility lookup is allowed.")),
     Streaming = true,
     Tools = [AccessibilityRuleCatalog.CreateLookupTool()],
     AvailableTools = ["accessibility_rule_lookup"]
@@ -156,6 +185,8 @@ Console.WriteLine("Copilot:");
 await ResponseStreamer.SendAndPrintAsync(
     session,
     "Use accessibility_rule_lookup to explain how to fix an input with no accessible name.");
+
+#pragma warning restore GHCP001
 ```
 
 The catalog tool and lookup live in `Helpers/AccessibilityRuleCatalog.cs`. Tool start and completion
@@ -171,6 +202,7 @@ printing live in `Helpers/ResponseStreamer.cs`.
 
 Open `src/workshop.ts`. The starter already imports the catalog and defines this local tool:
 
+<!-- code-id: 03-local-tool-nodejs-1 -->
 ```typescript
 export const accessibilityRuleLookup = defineTool("accessibility_rule_lookup", {
   description: "Looks up read-only WCAG guidance maintained by this application.",
@@ -191,6 +223,7 @@ this tool only returns application-owned read-only data.
 
 In the same file, `streamResponse` already prints tool lifecycle events:
 
+<!-- code-id: 03-local-tool-nodejs-2 -->
 ```typescript
 else if (event.type === "tool.execution_start") console.log(`\n[tool:start] ${event.data.toolName}`);
 else if (event.type === "tool.execution_complete") console.log(`[tool:done] success=${event.data.success}`);
@@ -202,14 +235,16 @@ Keep those branches so you can see when the model calls the local tool.
 
 In `src/index.ts`, import the tool with the streaming helper:
 
+<!-- code-id: 03-local-tool-nodejs-3 -->
 ```typescript
 import { accessibilityRuleLookup, streamResponse } from "./workshop.js";
 ```
 
 Replace the session creation and send call:
 
+<!-- code-id: 03-local-tool-nodejs-4 -->
 ```typescript
-const session = await client.createSession({
+const session = await client.createSession({ onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
   streaming: true,
   tools: [accessibilityRuleLookup],
   availableTools: ["accessibility_rule_lookup"],
@@ -234,6 +269,7 @@ npm start
 
 Look for the tool name and guidance for WCAG 4.1.2:
 
+<!-- code-id: 03-local-tool-nodejs-5 -->
 ```text
 [tool:start] accessibility_rule_lookup
 [tool:done] success=true
@@ -260,14 +296,15 @@ Compare your version with this complete Step 3 implementation.
 
 `src/index.ts`:
 
+<!-- code-id: 03-local-tool-nodejs-6 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 import { accessibilityRuleLookup, streamResponse } from "./workshop.js";
 
 const client = new CopilotClient();
-await client.start();
 try {
-  const session = await client.createSession({
+  await client.start();
+  const session = await client.createSession({ onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),
     streaming: true,
     tools: [accessibilityRuleLookup],
     availableTools: ["accessibility_rule_lookup"],
@@ -294,6 +331,7 @@ The typed tool definition and tool-activity printing live in `src/workshop.ts`.
 
 Open `workshop.py`. The starter already defines the parameter model and local tool:
 
+<!-- code-id: 03-local-tool-python-1 -->
 ```python
 class LookupParams(BaseModel):
     query: str = Field(description="The accessibility issue or WCAG criterion to look up.")
@@ -316,14 +354,17 @@ because this tool only returns application-owned read-only data.
 
 In `main.py`, import the tool:
 
+<!-- code-id: 03-local-tool-python-2 -->
 ```python
 from workshop import accessibility_rule_lookup
+from copilot.session_events import ToolExecutionStartData, ToolExecutionCompleteData
 ```
 
 Replace the session creation and send call. Keep the Step 2 event handler inside the session block:
 
+<!-- code-id: 03-local-tool-python-3 -->
 ```python
-async with await client.create_session(
+async with await client.create_session(on_permission_request=lambda _request, _invocation: PermissionDecisionReject(feedback="This session does not allow that permission request."),
     streaming=True,
     tools=[accessibility_rule_lookup],
     available_tools=["accessibility_rule_lookup"],
@@ -338,19 +379,29 @@ async with await client.create_session(
             case AssistantMessageDeltaData(delta_content=delta) if delta:
                 received_delta = True
                 print(delta, end="", flush=True)
-            case AssistantMessageData(content=content) if content and not received_delta:
-                print(content)
+            case AssistantMessageData(content=content):
+                if content and not received_delta:
+                    print(content)
+                received_delta = False
+            case ToolExecutionStartData(tool_name=name):
+                print(f"\n[tool:start] {name}")
+            case ToolExecutionCompleteData(success=success):
+                print(f"[tool:done] success={success}")
             case SessionErrorData(message=message):
                 error = RuntimeError(message)
                 done.set()
             case SessionIdleData():
                 done.set()
 
-    session.on(on_event)
-    await session.send(
-        "Use accessibility_rule_lookup to explain WCAG 4.1.2."
-    )
-    await done.wait()
+    unsubscribe = session.on(on_event)
+    try:
+        async with asyncio.timeout(120):
+            await session.send(
+                "Use accessibility_rule_lookup to explain WCAG 4.1.2."
+            )
+            await done.wait()
+    finally:
+        unsubscribe()
     if error is not None:
         raise error
 ```
@@ -365,6 +416,7 @@ python main.py
 
 The response should use the catalog's WCAG 4.1.2 title and recommendation:
 
+<!-- code-id: 03-local-tool-python-4 -->
 ```text
 WCAG 4.1.2 Name, Role, Value ...
 Associate a visible <label> with the input ...
@@ -389,10 +441,13 @@ Compare your version with this complete Step 3 implementation.
 
 `main.py`:
 
+<!-- code-id: 03-local-tool-python-5 -->
 ```python
 import asyncio
+from copilot.session_events import ToolExecutionStartData, ToolExecutionCompleteData
 
 from copilot import CopilotClient
+from copilot.rpc import PermissionDecisionReject
 from copilot.session_events import AssistantMessageData, AssistantMessageDeltaData, SessionErrorData, SessionIdleData
 
 from workshop import accessibility_rule_lookup
@@ -400,7 +455,7 @@ from workshop import accessibility_rule_lookup
 
 async def main() -> None:
     async with CopilotClient() as client:
-        async with await client.create_session(
+        async with await client.create_session(on_permission_request=lambda _request, _invocation: PermissionDecisionReject(feedback="This session does not allow that permission request."),
             streaming=True,
             tools=[accessibility_rule_lookup],
             available_tools=["accessibility_rule_lookup"],
@@ -415,17 +470,27 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
+                    case ToolExecutionStartData(tool_name=name):
+                        print(f"\n[tool:start] {name}")
+                    case ToolExecutionCompleteData(success=success):
+                        print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            await session.send("Use accessibility_rule_lookup to explain WCAG 4.1.2.")
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                async with asyncio.timeout(120):
+                    await session.send("Use accessibility_rule_lookup to explain WCAG 4.1.2.")
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
@@ -446,6 +511,7 @@ The typed tool definition lives in `workshop.py`.
 
 Add `strings` to the imports in `main.go`, then add these declarations before `streamResponse`:
 
+<!-- code-id: 03-local-tool-go-1 -->
 ```go
 type lookupParams struct {
 	Query string `json:"query" jsonschema:"The accessibility issue or WCAG criterion to look up."`
@@ -469,8 +535,9 @@ func accessibilityRuleLookup(params lookupParams, _ copilot.ToolInvocation) (any
 
 ### 2. Define and register the tool
 
-At the start of `main`, create the tool:
+At the start of `run`, create the tool:
 
+<!-- code-id: 03-local-tool-go-2 -->
 ```go
 lookup := copilot.DefineTool(
 	"accessibility_rule_lookup",
@@ -482,22 +549,28 @@ lookup.SkipPermission = true
 
 Replace the session configuration and final send:
 
+Inside `run`, replace from the `client.CreateSession` statement through the final send with this block. Keep `run`'s closing `return nil` and brace afterward.
+
+<!-- code-id: 03-local-tool-go-3 -->
 ```go
 session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
+	OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+		return &rpc.PermissionDecisionReject{}, nil
+	},
 	Streaming:      copilot.Bool(true),
 	Tools:          []copilot.Tool{lookup},
 	AvailableTools: []string{"accessibility_rule_lookup"},
 })
 if err != nil {
-	panic(err)
+	return err
 }
-defer session.Disconnect()
+defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 if err := streamResponse(
 	session,
 	"Use accessibility_rule_lookup to explain WCAG 4.1.2.",
 ); err != nil {
-	panic(err)
+	return err
 }
 ```
 
@@ -513,6 +586,7 @@ go run .
 
 The streamed response should use the lookup result for WCAG 4.1.2:
 
+<!-- code-id: 03-local-tool-go-4 -->
 ```text
 WCAG 4.1.2 Name, Role, Value ...
 Associate each input with a visible label.
@@ -537,15 +611,20 @@ Compare your version with this complete Step 3 implementation.
 
 `main.go`:
 
+<!-- code-id: 03-local-tool-go-5 -->
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"sync/atomic"
 
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 type lookupParams struct {
@@ -568,25 +647,36 @@ func accessibilityRuleLookup(params lookupParams, _ copilot.ToolInvocation) (any
 }
 
 func streamResponse(session *copilot.Session, prompt string) error {
-	receivedDelta := false
+	var receivedDelta atomic.Bool
 	unsubscribe := session.On(func(event copilot.SessionEvent) {
-		if delta, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
-			receivedDelta = true
+		if delta, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok && delta.DeltaContent != "" {
+			receivedDelta.Store(true)
 			fmt.Print(delta.DeltaContent)
 		}
 	})
 	defer unsubscribe()
+
 	response, err := session.SendAndWait(context.Background(), copilot.MessageOptions{Prompt: prompt})
-	if err == nil && !receivedDelta && response != nil {
+	if err != nil {
+		return err
+	}
+	if !receivedDelta.Load() && response != nil {
 		if message, ok := response.Data.(*copilot.AssistantMessageData); ok {
 			fmt.Print(message.Content)
 		}
 	}
 	fmt.Println()
-	return err
+	return nil
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() (err error) {
 	lookup := copilot.DefineTool(
 		"accessibility_rule_lookup",
 		"Looks up read-only WCAG guidance maintained by this application.",
@@ -595,24 +685,28 @@ func main() {
 	lookup.SkipPermission = true
 
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+		return err
 	}
-	defer client.Stop()
 
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
 		Streaming:      copilot.Bool(true),
 		Tools:          []copilot.Tool{lookup},
 		AvailableTools: []string{"accessibility_rule_lookup"},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	if err := streamResponse(session, "Use accessibility_rule_lookup to explain WCAG 4.1.2."); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 ```
 
@@ -626,10 +720,12 @@ func main() {
 
 Add these imports near the top of `src/main.rs`:
 
+<!-- code-id: 03-local-tool-rust-1 -->
 ```rust
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use github_copilot_sdk::permission;
 use github_copilot_sdk::tool::{JsonSchema, ToolHandler, schema_for};
 use github_copilot_sdk::types::{SessionConfig, Tool, ToolInvocation};
 use github_copilot_sdk::{Client, ClientOptions, Error, ToolResult};
@@ -638,6 +734,7 @@ use serde::Deserialize;
 
 Replace the narrower Step 2 SDK imports, then add the typed handler before `stream_response`:
 
+<!-- code-id: 03-local-tool-rust-2 -->
 ```rust
 #[derive(Deserialize, JsonSchema)]
 struct LookupParams {
@@ -663,29 +760,63 @@ impl ToolHandler for AccessibilityRuleLookup {
 
 ### 2. Define and register the tool
 
-At the start of `main`, create the tool and add it to the session configuration:
+The next implementation adds the local tool to a lifecycle-protected entrypoint:
 
+Replace the entire `#[tokio::main]` function with this implementation, including its attribute. Keep the streaming macro and the `std::io::{self, Write}` import above it. Do not append another send or cleanup block.
+
+<!-- code-id: 03-local-tool-rust-3 -->
 ```rust
-let lookup = Tool::new("accessibility_rule_lookup")
-    .with_description("Looks up read-only WCAG guidance maintained by this application.")
-    .with_parameters(schema_for::<LookupParams>())
-    .with_skip_permission(true)
-    .with_handler(Arc::new(AccessibilityRuleLookup));
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let lookup = Tool::new("accessibility_rule_lookup")
+        .with_description("Looks up read-only WCAG guidance maintained by this application.")
+        .with_parameters(schema_for::<LookupParams>())
+        .with_skip_permission(true)
+        .with_handler(Arc::new(AccessibilityRuleLookup));
 
-let client = Client::start(ClientOptions::default()).await?;
-let mut config = SessionConfig::default();
-config.streaming = Some(true);
-config.tools = Some(vec![lookup]);
-config.available_tools = Some(vec!["accessibility_rule_lookup".to_owned()]);
-let session = client.create_session(config).await?;
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
+    config.streaming = Some(true);
+    config.tools = Some(vec![lookup]);
+    config.available_tools = Some(vec!["accessibility_rule_lookup".to_owned()]);
 
-stream_response!(
-    session,
-    "Use accessibility_rule_lookup to explain WCAG 4.1.2.".to_owned()
-);
+    let client = Client::start(ClientOptions::default()).await?;
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(
+                session,
+                "Use accessibility_rule_lookup to explain WCAG 4.1.2.".to_owned()
+            );
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+        })
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
+}
 ```
 
-Keep the Step 2 disconnect and client shutdown after the macro call.
+The shown replacement already contains disconnect and client shutdown on success and failure.
 `config.tools` registers the implementation. `config.available_tools` is the allowlist the model may
 call. `with_skip_permission(true)` is intentional because this tool only returns application-owned
 read-only data.
@@ -698,6 +829,7 @@ cargo run
 
 The streamed response should use the lookup result for WCAG 4.1.2:
 
+<!-- code-id: 03-local-tool-rust-4 -->
 ```text
 WCAG 4.1.2 Name, Role, Value ...
 Associate each input with a visible label.
@@ -722,11 +854,13 @@ Compare your version with this complete Step 3 implementation.
 
 `src/main.rs`:
 
+<!-- code-id: 03-local-tool-rust-5 -->
 ```rust
 use std::io::{self, Write};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use github_copilot_sdk::permission;
 use github_copilot_sdk::tool::{JsonSchema, ToolHandler, schema_for};
 use github_copilot_sdk::types::{SessionConfig, Tool, ToolInvocation};
 use github_copilot_sdk::{Client, ClientOptions, Error, ToolResult};
@@ -787,7 +921,7 @@ macro_rules! stream_response {
                         "session.error" => {
                             let message = event.data.get("message").and_then(|value| value.as_str())
                                 .unwrap_or("Copilot session failed");
-                            return Err(std::io::Error::new(std::io::ErrorKind::Other, message.to_owned()).into());
+                            return Err(std::io::Error::other(message.to_owned()).into());
                         }
                         "session.idle" => idle = true,
                         _ => {}
@@ -807,20 +941,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_skip_permission(true)
         .with_handler(Arc::new(AccessibilityRuleLookup));
 
-    let client = Client::start(ClientOptions::default()).await?;
-    let mut config = SessionConfig::default();
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
     config.streaming = Some(true);
     config.tools = Some(vec![lookup]);
     config.available_tools = Some(vec!["accessibility_rule_lookup".to_owned()]);
-    let session = client.create_session(config).await?;
 
-    stream_response!(
-        session,
-        "Use accessibility_rule_lookup to explain WCAG 4.1.2.".to_owned()
-    );
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    let client = Client::start(ClientOptions::default()).await?;
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+            stream_response!(
+                session,
+                "Use accessibility_rule_lookup to explain WCAG 4.1.2.".to_owned()
+            );
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timeout waiting for response")
+        })
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        .and_then(|result| result);
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
+    }
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 
@@ -834,6 +993,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Add these imports to `src/main/java/workshop/AccessibilityReport.java`:
 
+<!-- code-id: 03-local-tool-java-1 -->
 ```java
 import com.github.copilot.rpc.ToolDefinition;
 import com.github.copilot.tool.Param;
@@ -843,6 +1003,7 @@ import java.util.List;
 
 Add this method before the class's closing brace:
 
+<!-- code-id: 03-local-tool-java-2 -->
 ```java
 private static String lookupRule(String query) {
     if (query.toLowerCase(java.util.Locale.ROOT).contains("4.1.2")) {
@@ -858,6 +1019,7 @@ private static String lookupRule(String query) {
 
 At the start of `main`, define the tool and session configuration:
 
+<!-- code-id: 03-local-tool-java-3 -->
 ```java
 var lookup = ToolDefinition.from(
         "accessibility_rule_lookup",
@@ -869,27 +1031,24 @@ var config = new SessionConfig()
         .setStreaming(true)
         .setTools(List.of(lookup))
         .setAvailableTools(List.of("accessibility_rule_lookup"))
-        .setOnPermissionRequest(PermissionHandler.APPROVE_ALL);
+        .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")));
 ```
 
 Replace session creation and the prompt inside the client block:
 
+<!-- code-id: 03-local-tool-java-4 -->
 ```java
-var session = client.createSession(config).get();
-var response = session.sendAndWait(new MessageOptions()
-        .setPrompt("Use accessibility_rule_lookup to explain WCAG 4.1.2."))
-        .get();
-if (response == null) {
-    throw new IllegalStateException("Copilot completed without an assistant message.");
+try (var session = client.createSession(config).get()) {
+    ResponseStreamer.sendAndPrint(session, "Use accessibility_rule_lookup to explain WCAG 4.1.2.");
 }
-System.out.println(response.getData().content());
 ```
 
 `setTools` registers the implementation. `setAvailableTools` is the allowlist the model may call.
 `skipPermission(true)` is intentional because this tool only returns application-owned read-only
 data. Keep the Step 1 permission handler until Step 4 replaces it with the scoped Playwright
-handler. The Java implementation uses a streaming-enabled session with `sendAndWait`, so it prints the
-completed response when the turn finishes.
+handler. The supplied `ResponseStreamer.sendAndPrint` prints response chunks and tool activity.
+Keep `PermissionRequestResult` and `CompletableFuture` imported from Step 2.
 
 ## Run it
 
@@ -899,6 +1058,7 @@ mvn compile exec:java
 
 The response should use the lookup result for WCAG 4.1.2:
 
+<!-- code-id: 03-local-tool-java-5 -->
 ```text
 WCAG 4.1.2 Name, Role, Value ...
 Associate each input with a visible label.
@@ -923,17 +1083,19 @@ Compare your version with this complete Step 3 implementation.
 
 `AccessibilityReport.java`:
 
+<!-- code-id: 03-local-tool-java-6 -->
 ```java
 package workshop;
 
 import com.github.copilot.CopilotClient;
 import com.github.copilot.rpc.MessageOptions;
-import com.github.copilot.rpc.PermissionHandler;
 import com.github.copilot.rpc.SessionConfig;
 import com.github.copilot.rpc.ToolDefinition;
 import com.github.copilot.tool.Param;
-
 import java.util.List;
+import com.github.copilot.rpc.PermissionRequestResult;
+import java.util.concurrent.CompletableFuture;
+
 
 public final class AccessibilityReport {
     private AccessibilityReport() {
@@ -949,18 +1111,14 @@ public final class AccessibilityReport {
                 .setStreaming(true)
                 .setTools(List.of(lookup))
                 .setAvailableTools(List.of("accessibility_rule_lookup"))
-                .setOnPermissionRequest(PermissionHandler.APPROVE_ALL);
+                .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")));
 
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(config).get();
-            var response = session.sendAndWait(new MessageOptions()
-                    .setPrompt("Use accessibility_rule_lookup to explain WCAG 4.1.2."))
-                    .get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            try (var session = client.createSession(config).get()) {
+                ResponseStreamer.sendAndPrint(session, "Use accessibility_rule_lookup to explain WCAG 4.1.2.");
             }
-            System.out.println(response.getData().content());
         }
     }
 

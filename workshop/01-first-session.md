@@ -1,11 +1,46 @@
 # Step 1: Create your first Copilot session
 
-> **Time:** 10 minutes
+> **Pace:** Self-paced
 
 ## What you'll build
 
 You'll connect the console application to the Copilot runtime, create a conversation, send a
 prompt, and print the response.
+
+## Follow one request through the harness
+
+The SDK is the API your code calls; it is not the model. The Copilot CLI runtime is the
+**agent harness**: it maintains conversation state, sends model requests, coordinates requested
+tools, and emits events. The model proposes text or tool calls. Your application supplies local
+tool implementations and decides which capabilities and permissions the session has.
+
+SDK means **software development kit**. Instead of asking a person to drive the Copilot interface,
+your program supplies the inputs and consumes the results in its own interface. The installed CLI
+provides the runtime underneath; your application's users do not have to type CLI prompts.
+
+<!-- code-id: 01-first-session-shared-1 -->
+```text
+Your application -> SDK client -> Copilot CLI runtime -> model service
+                                      ^                    |
+                                      |    text/tool request
+                                      +--------------------+
+                                      |
+                         permitted tool executes
+                         -> result joins session context
+                         -> model may be called again
+```
+
+A **user request** starts with your prompt and can include several **assistant turns** before
+the session becomes idle. In the SDK event stream, an assistant turn is one model request and
+its consequences, including requested tools; `assistant.turn_start` and `assistant.turn_end`
+mark those iterations. A **session** holds the conversation across user requests; the SDK object
+is a handle to conversation state managed by the runtime. The first example
+explicitly exposes no tools, so it only asks the model for text. Later lessons add capabilities
+deliberately. Logging in authorizes model access; it does not grant the application permission to
+read your files or browse arbitrary sites.
+
+Before running, predict which part executes your code and which part produces the response.
+Keep this diagram nearby when tools enter the picture.
 
 :::language dotnet
 ## Meet the GitHub Copilot SDK and runtime
@@ -85,6 +120,11 @@ Keeping those responsibilities separate lets the runtime connection outlive any 
 It also gives you a small working example before streaming and tools enter the picture.
 
 At this point, the console app is simply `Client -> Session -> model response`.
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 
 :::language rust
@@ -132,9 +172,14 @@ At this point, the console app is simply `CopilotClient -> session -> model resp
 :::language dotnet
 Open `Program.cs` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-dotnet-1 -->
 ```csharp
+using System;
+using System.Threading.Tasks;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== First Copilot session ===\n");
 
@@ -146,17 +191,22 @@ Console.WriteLine($"Connected to the Copilot runtime: {ping.Message}");
 
 await using var session = await client.CreateSessionAsync(new SessionConfig
 {
-    OnPermissionRequest = PermissionHandler.ApproveAll,
+    AvailableTools = [],
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("This session does not allow unexpected permission requests."))
 });
 var response = await session.SendAndWaitAsync(
-    "In one sentence, explain why an accessible name matters for a form input.");
+    "In one sentence, explain why an accessible name matters for a form input.",
+    timeout: TimeSpan.FromSeconds(120));
 
-if (response is null)
+if (string.IsNullOrWhiteSpace(response?.Data.Content))
 {
     throw new InvalidOperationException("Copilot completed without an assistant message.");
 }
 
 Console.WriteLine($"\nCopilot: {response.Data.Content}");
+
+#pragma warning restore GHCP001
 ```
 
 The ping verifies the runtime connection. The completed-response send waits until the session
@@ -166,13 +216,14 @@ becomes idle, so it works well when you only need the finished answer.
 :::language nodejs
 Open `src/index.ts` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-nodejs-1 -->
 ```typescript
-import { approveAll, CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient } from "@github/copilot-sdk";
 
 const client = new CopilotClient();
-await client.start();
 try {
-  const session = await client.createSession({ onPermissionRequest: approveAll });
+  await client.start();
+  const session = await client.createSession({ availableTools: [], onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }) });
   try {
     const response = await session.sendAndWait({ prompt: "Reply with one sentence confirming this Copilot session is ready." });
     console.log(response?.data && "content" in response.data ? response.data.content : response);
@@ -191,96 +242,113 @@ answer. Always stop the session and client in `finally` blocks so the runtime sh
 :::language python
 Open `main.py` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-python-1 -->
 ```python
 import asyncio
 
-from copilot import CopilotClient, PermissionHandler
-from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
+from copilot import CopilotClient
+from copilot.rpc import PermissionDecisionReject
+from copilot.session_events import AssistantMessageData
 
 
 async def main() -> None:
+    print("=== First Copilot session ===")
     async with CopilotClient() as client:
         async with await client.create_session(
-            on_permission_request=PermissionHandler.approve_all
+            available_tools=[],
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(
+                feedback="This session does not allow that permission request."
+            ),
         ) as session:
-            done = asyncio.Event()
-            error: RuntimeError | None = None
-
-            def on_event(event) -> None:
-                nonlocal error
-                match event.data:
-                    case AssistantMessageData(content=content):
-                        print(content)
-                    case SessionErrorData(message=message):
-                        error = RuntimeError(message)
-                        done.set()
-                    case SessionIdleData():
-                        done.set()
-
-            session.on(on_event)
-            await session.send("In one sentence, explain why an accessible name matters for a form input.")
-            await done.wait()
-            if error is not None:
-                raise error
+            response = await session.send_and_wait(
+                "Reply with one sentence confirming this Copilot session is ready.",
+                timeout=120,
+            )
+            if (response is None or not isinstance(response.data, AssistantMessageData)
+                    or not response.data.content.strip()):
+                raise RuntimeError("Copilot completed without an assistant response.")
+            print(response.data.content)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Python listens for session events instead of calling a single completed-response helper. Print the
-assistant message, treat session errors as failures, and wait for the idle event before exiting.
+`send_and_wait` owns the event wait and returns the completed response event. Its data contains
+the assistant message. The checks reject missing or blank text, and the async context managers
+release the session before the client. Step 2 makes progressive events visible.
 :::
 
 :::language go
 Open `main.go` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-go-1 -->
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/github/copilot-sdk/go/rpc"
+	"os"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
 
 func main() {
-	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
-	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	defer client.Stop()
+}
+
+func run() (err error) {
+	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
+	if err := client.Start(context.Background()); err != nil {
+		return err
+	}
 
 	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		AvailableTools: []string{},
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer session.Disconnect()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	response, err := session.SendAndWait(context.Background(), copilot.MessageOptions{
 		Prompt: "In one sentence, explain why an accessible name matters for a form input.",
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if response != nil {
 		if message, ok := response.Data.(*copilot.AssistantMessageData); ok {
 			fmt.Println(message.Content)
 		}
 	}
+	return nil
 }
 ```
 
 `SendAndWait` waits until the session becomes idle, so it works well when you only need the finished
 answer. `defer` disconnects the session and stops the client on the way out.
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 
 :::language rust
 Open `src/main.rs` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-rust-1 -->
 ```rust
 use github_copilot_sdk::permission;
 use github_copilot_sdk::types::{MessageOptions, SessionConfig};
@@ -288,25 +356,45 @@ use github_copilot_sdk::{Client, ClientOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
+    config.available_tools = Some(vec![]);
+
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client
-        .create_session(SessionConfig::default().with_permission_handler(permission::approve_all()))
-        .await?;
-    let response = session
-        .send_and_wait(MessageOptions::new(
-            "In one sentence, explain why an accessible name matters for a form input.",
-        ))
-        .await?;
-
-    if let Some(message) = response {
-        if let Some(content) = message.data.get("content").and_then(|value| value.as_str()) {
-            println!("{content}");
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = async {
+            let response = session
+                .send_and_wait(MessageOptions::new(
+                    "In one sentence, explain why an accessible name matters for a form input.",
+                ))
+                .await?;
+            if let Some(message) = response {
+                if let Some(content) = message.data.get("content").and_then(|value| value.as_str())
+                {
+                    println!("{content}");
+                }
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
         }
+        .await;
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
     }
-
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 
@@ -317,13 +405,16 @@ finished answer. Disconnect the session and stop the client before returning.
 :::language java
 Open `src/main/java/workshop/AccessibilityReport.java` and **replace the entire file**:
 
+<!-- code-id: 01-first-session-java-1 -->
 ```java
 package workshop;
 
 import com.github.copilot.CopilotClient;
-import com.github.copilot.rpc.PermissionHandler;
 import com.github.copilot.rpc.MessageOptions;
 import com.github.copilot.rpc.SessionConfig;
+import com.github.copilot.rpc.PermissionRequestResult;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class AccessibilityReport {
     private AccessibilityReport() {
@@ -332,15 +423,20 @@ public final class AccessibilityReport {
     public static void main(String[] args) throws Exception {
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client
-                    .createSession(new SessionConfig().setOnPermissionRequest(PermissionHandler.APPROVE_ALL)).get();
-            var response = session.sendAndWait(new MessageOptions()
-                    .setPrompt("In one sentence, explain why an accessible name matters for a form input."))
-                    .get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            var config = new SessionConfig()
+                    .setAvailableTools(List.of())
+                    .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")));
+            try (var session = client.createSession(config).get()) {
+                var response = session.sendAndWait(new MessageOptions().setPrompt(
+                        "In one sentence, explain why an accessible name matters for a form input."), 120_000).get();
+                String content = response == null || response.getData() == null
+                        ? null : response.getData().content();
+                if (content == null || content.isBlank()) {
+                    throw new IllegalStateException("Copilot completed without an assistant response.");
+                }
+                System.out.println(content);
             }
-            System.out.println(response.getData().content());
         }
     }
 }
@@ -350,7 +446,12 @@ public final class AccessibilityReport {
 answer. The try-with-resources block closes the client when `main` exits.
 :::
 
-This session sets a permission handler and nothing else, so it runs with the SDK's default persona.
+This session exposes no tools and rejects unexpected permission requests. It still uses the SDK's
+default persona.
+
+<details>
+<summary>Reference: choosing a system-message mode later</summary>
+
 The knob you did not turn is the
 [system message](https://github.com/github/copilot-sdk/blob/main/docs/getting-started.md#customize-the-system-message),
 which has three modes. `append` is the default: your content is added after the SDK-managed prompt,
@@ -360,6 +461,8 @@ security guardrails the SDK injects. `replace` swaps the entire prompt for your 
 preserving the rest. This workshop stays on the default, so every answer you see comes from the
 standard persona. Reach for the other two modes when an application needs a voice or a scope of its
 own.
+
+</details>
 
 ## Run it
 
@@ -382,6 +485,11 @@ python main.py
 ```bash
 go run .
 ```
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 :::language rust
 ```bash
@@ -397,6 +505,7 @@ mvn compile exec:java
 :::language dotnet
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-dotnet-2 -->
 ```text
 === First Copilot session ===
 
@@ -409,6 +518,7 @@ Copilot: An accessible name lets assistive technology identify the input's purpo
 :::language nodejs
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-nodejs-2 -->
 ```text
 This Copilot session is ready and waiting for your next prompt.
 ```
@@ -417,6 +527,7 @@ This Copilot session is ready and waiting for your next prompt.
 :::language python
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-python-2 -->
 ```text
 An accessible name lets assistive technology identify the input's purpose.
 ```
@@ -425,14 +536,21 @@ An accessible name lets assistive technology identify the input's purpose.
 :::language go
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-go-2 -->
 ```text
 An accessible name lets assistive technology identify the input's purpose.
 ```
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 
 :::language rust
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-rust-2 -->
 ```text
 An accessible name lets assistive technology identify the input's purpose.
 ```
@@ -441,6 +559,7 @@ An accessible name lets assistive technology identify the input's purpose.
 :::language java
 Your exact response will vary, but the output should have this shape:
 
+<!-- code-id: 01-first-session-java-2 -->
 ```text
 An accessible name lets assistive technology identify the input's purpose.
 ```
@@ -452,7 +571,7 @@ An accessible name lets assistive technology identify the input's purpose.
 | Symptom | Fix |
 |---|---|
 | Authentication or authorization error | Run `copilot login` again, then rerun the project. |
-| Runtime executable not found | Set `COPILOT_CLI_BINARY_PATH` using the preflight instructions. |
+| Runtime executable not found | Follow your selected language's CLI-path instructions in preflight; the environment variable is not the same for every SDK. |
 | The request times out | Check network access to GitHub Copilot and retry; this example does not hide the failure. |
 
 </details>
@@ -502,6 +621,11 @@ Keep the client from `copilot.NewClient` for the lifetime of the runtime connect
 `CreateSession` owns the messages and tool context for one conversation.
 
 </details>
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 
 :::language rust
@@ -530,8 +654,14 @@ the messages and tool context for one conversation.
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-dotnet-3 -->
 ```csharp
+using System;
+using System.Threading.Tasks;
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
+
+#pragma warning disable GHCP001 // Custom permission decisions are evaluation-only in SDK 1.0.11.
 
 Console.WriteLine("=== First Copilot session ===\n");
 
@@ -541,16 +671,24 @@ await client.StartAsync();
 var ping = await client.PingAsync("workshop");
 Console.WriteLine($"Connected to the Copilot runtime: {ping.Message}");
 
-await using var session = await client.CreateSessionAsync(new SessionConfig());
+await using var session = await client.CreateSessionAsync(new SessionConfig
+{
+    AvailableTools = [],
+    OnPermissionRequest = (_, _) => Task.FromResult(
+        PermissionDecision.Reject("This session does not allow unexpected permission requests."))
+});
 var response = await session.SendAndWaitAsync(
-    "In one sentence, explain why an accessible name matters for a form input.");
+    "In one sentence, explain why an accessible name matters for a form input.",
+    timeout: TimeSpan.FromSeconds(120));
 
-if (response is null)
+if (string.IsNullOrWhiteSpace(response?.Data.Content))
 {
     throw new InvalidOperationException("Copilot completed without an assistant message.");
 }
 
 Console.WriteLine($"\nCopilot: {response.Data.Content}");
+
+#pragma warning restore GHCP001
 ```
 </details>
 :::
@@ -561,13 +699,14 @@ Console.WriteLine($"\nCopilot: {response.Data.Content}");
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-nodejs-3 -->
 ```typescript
 import { CopilotClient } from "@github/copilot-sdk";
 
 const client = new CopilotClient();
-await client.start();
 try {
-  const session = await client.createSession({});
+  await client.start();
+  const session = await client.createSession({ availableTools: [], onPermissionRequest: () => ({ kind: "reject", feedback: "This session does not allow that permission request." }),});
   try {
     const response = await session.sendAndWait({ prompt: "Reply with one sentence confirming this Copilot session is ready." });
     console.log(response?.data && "content" in response.data ? response.data.content : response);
@@ -587,35 +726,32 @@ try {
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-python-3 -->
 ```python
 import asyncio
 
 from copilot import CopilotClient
-from copilot.session_events import AssistantMessageData, SessionErrorData, SessionIdleData
+from copilot.rpc import PermissionDecisionReject
+from copilot.session_events import AssistantMessageData
 
 
 async def main() -> None:
+    print("=== First Copilot session ===")
     async with CopilotClient() as client:
-        async with await client.create_session() as session:
-            done = asyncio.Event()
-            error: RuntimeError | None = None
-
-            def on_event(event) -> None:
-                nonlocal error
-                match event.data:
-                    case AssistantMessageData(content=content):
-                        print(content)
-                    case SessionErrorData(message=message):
-                        error = RuntimeError(message)
-                        done.set()
-                    case SessionIdleData():
-                        done.set()
-
-            session.on(on_event)
-            await session.send("In one sentence, explain why an accessible name matters for a form input.")
-            await done.wait()
-            if error is not None:
-                raise error
+        async with await client.create_session(
+            available_tools=[],
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(
+                feedback="This session does not allow that permission request."
+            ),
+        ) as session:
+            response = await session.send_and_wait(
+                "Reply with one sentence confirming this Copilot session is ready.",
+                timeout=120,
+            )
+            if (response is None or not isinstance(response.data, AssistantMessageData)
+                    or not response.data.content.strip()):
+                raise RuntimeError("Copilot completed without an assistant response.")
+            print(response.data.content)
 
 
 if __name__ == "__main__":
@@ -630,43 +766,65 @@ if __name__ == "__main__":
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-go-3 -->
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/github/copilot-sdk/go/rpc"
+	"os"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
 
 func main() {
-	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
-	if err := client.Start(context.Background()); err != nil {
-		panic(err)
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	defer client.Stop()
+}
 
-	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{})
-	if err != nil {
-		panic(err)
+func run() (err error) {
+	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
+	if err := client.Start(context.Background()); err != nil {
+		return err
 	}
-	defer session.Disconnect()
+
+	session, err := client.CreateSession(context.Background(), &copilot.SessionConfig{
+		AvailableTools: []string{},
+		OnPermissionRequest: func(_ copilot.PermissionRequest, _ copilot.PermissionInvocation) (rpc.PermissionDecision, error) {
+			return &rpc.PermissionDecisionReject{}, nil
+		},
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
 	response, err := session.SendAndWait(context.Background(), copilot.MessageOptions{
 		Prompt: "In one sentence, explain why an accessible name matters for a form input.",
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if response != nil {
 		if message, ok := response.Data.(*copilot.AssistantMessageData); ok {
 			fmt.Println(message.Content)
 		}
 	}
+	return nil
 }
 ```
 </details>
+
+`main` reports the error returned by `run` only after cleanup defers have executed.
+Put later orchestration edits inside `run`, not the thin `main` wrapper. Cleanup
+errors are joined with the main error instead of silently replacing it.
+
 :::
 
 :::language rust
@@ -675,29 +833,53 @@ func main() {
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-rust-3 -->
 ```rust
+use github_copilot_sdk::permission;
 use github_copilot_sdk::types::{MessageOptions, SessionConfig};
 use github_copilot_sdk::{Client, ClientOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config = SessionConfig::default().with_permission_handler(permission::deny_all());
+    config.available_tools = Some(vec![]);
+
     let client = Client::start(ClientOptions::default()).await?;
-    let session = client.create_session(SessionConfig::default()).await?;
-    let response = session
-        .send_and_wait(MessageOptions::new(
-            "In one sentence, explain why an accessible name matters for a form input.",
-        ))
-        .await?;
-
-    if let Some(message) = response {
-        if let Some(content) = message.data.get("content").and_then(|value| value.as_str()) {
-            println!("{content}");
+    let result = async {
+        let session = client.create_session(config).await?;
+        let response_result = async {
+            let response = session
+                .send_and_wait(MessageOptions::new(
+                    "In one sentence, explain why an accessible name matters for a form input.",
+                ))
+                .await?;
+            if let Some(message) = response {
+                if let Some(content) = message.data.get("content").and_then(|value| value.as_str())
+                {
+                    println!("{content}");
+                }
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
         }
+        .await;
+        let cleanup = session.disconnect().await;
+        if let Err(error) = cleanup {
+            if response_result.is_ok() {
+                return Err(Box::new(error) as Box<dyn std::error::Error>);
+            }
+            eprintln!("Session cleanup also failed: {error}");
+        }
+        response_result
     }
-
-    session.disconnect().await?;
-    client.stop().await?;
-    Ok(())
+    .await;
+    let cleanup = client.stop().await;
+    if let Err(error) = cleanup {
+        if result.is_ok() {
+            return Err(Box::new(error) as Box<dyn std::error::Error>);
+        }
+        eprintln!("Client cleanup also failed: {error}");
+    }
+    result
 }
 ```
 </details>
@@ -709,12 +891,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Compare your work with this complete Step 1 implementation.
 
+<!-- code-id: 01-first-session-java-3 -->
 ```java
 package workshop;
 
 import com.github.copilot.CopilotClient;
 import com.github.copilot.rpc.MessageOptions;
 import com.github.copilot.rpc.SessionConfig;
+import com.github.copilot.rpc.PermissionRequestResult;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class AccessibilityReport {
     private AccessibilityReport() {
@@ -723,14 +909,20 @@ public final class AccessibilityReport {
     public static void main(String[] args) throws Exception {
         try (var client = new CopilotClient()) {
             client.start().get();
-            var session = client.createSession(new SessionConfig()).get();
-            var response = session.sendAndWait(new MessageOptions()
-                    .setPrompt("In one sentence, explain why an accessible name matters for a form input."))
-                    .get();
-            if (response == null) {
-                throw new IllegalStateException("Copilot completed without an assistant message.");
+            var config = new SessionConfig()
+                    .setAvailableTools(List.of())
+                    .setOnPermissionRequest((request, ignored) -> CompletableFuture.completedFuture(
+                        PermissionRequestResult.reject("This session does not allow unexpected permission requests.")));
+            try (var session = client.createSession(config).get()) {
+                var response = session.sendAndWait(new MessageOptions().setPrompt(
+                        "In one sentence, explain why an accessible name matters for a form input."), 120_000).get();
+                String content = response == null || response.getData() == null
+                        ? null : response.getData().content();
+                if (content == null || content.isBlank()) {
+                    throw new IllegalStateException("Copilot completed without an assistant response.");
+                }
+                System.out.println(content);
             }
-            System.out.println(response.getData().content());
         }
     }
 }

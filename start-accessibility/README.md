@@ -17,8 +17,16 @@ local tool, MCP server, or report until the corresponding step.
 | Rust | [Rust 1.94+](https://rustup.rs/) | `cd start-accessibility/rust && cargo check --locked` |
 | Java | [Java 17+](https://adoptium.net/) and [Maven](https://maven.apache.org/install.html) | `cd start-accessibility/java && mvn compile` |
 
-Because you edit these files in place, your work shows up in `git status`. That is expected. Run
-`git checkout -- .` from the repository root to restore a clean starter. Go, Rust, and Java tracks
+Because you edit these files in place, your work shows up in `git status`. That is expected.
+Before restoring anything, inspect `git status --short` and `git diff`, then copy your
+learner-authored files, including untracked practice files, to a separate backup and check that
+the backup opens. Compare a named file with the finished reference before deciding to restore it.
+If you want to restart that file, use `git restore --source=HEAD -- <exact-file-path>` from the
+repository root, replacing the placeholder with that one tracked file's path. This discards edits
+to that file only. Do not restore a whole directory or delete untracked files as a recovery step.
+Other language projects and the museum workshop must remain untouched.
+
+Go, Rust, and Java tracks
 require the
 [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) on
 `PATH` when you later run the application. SDK setup and API references are available in the

@@ -5,10 +5,10 @@
 // Everything below is yours to write, one lesson at a time.
 //
 // Step 1  First curator session .......... create the client with Client::start, create a session
-//                                          from SessionConfig::default().with_permission_handler(
-//                                          permission::approve_all()) so requests get an answer,
-//                                          send a prompt, print the reply, then disconnect
-//                                          and stop.
+//                                          with available_tools = Some(vec![]) for zero tools and
+//                                          with_permission_handler(Arc::new(DenyUnexpectedPermissions)).
+//                                          Send a prompt, print the reply, then disconnect and stop
+//                                          even on failure. None is not a zero-tools policy.
 // Step 2  Stream the curator ............. swap the blocking send for stream_exhibit so tokens and
 //                                          [tool:start] / [tool:done] events print live.
 // Step 3  Curator voice .................. add `const SYSTEM_MESSAGE: &str = ...` here and pass it
@@ -28,10 +28,11 @@
 // Step 6  Prove the structure ............ call format_validation(&validate_exhibit(&exhibit)).
 // Step 7  Wikipedia research ............. add research_config() with wikipedia_server() plus
 //                                          wikipedia_permission_handler(), run it through
-//                                          run_session, and print sources after the exhibit.
+//                                          run_session, and print model-reported, unverified sources.
 //                                          Research never joins the approved facts.
 // Step 8  Interactive exhibit page ....... add html_config() with the "builtin:apply_patch"
-//                                          allowlist and exhibit_write_permission(...).
+//                                          allowlist and exhibit_write_permission(...); capture the
+//                                          artifact before the run and verify its update afterward.
 
 // Your `use` declarations go here, and grow as the lessons progress.
 

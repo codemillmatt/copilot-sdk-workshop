@@ -108,7 +108,7 @@ func generationConfig(workingDirectory string, approvedFacts []string) (*copilot
 	return &copilot.SessionConfig{
 		ClientName:          "museum-exhibit-studio",
 		Model:               selectedModel(),
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		OnPermissionRequest: DenyUnexpectedPermission,
 		Tools:               []copilot.Tool{lookup},
 		AvailableTools:      []string{ApprovedFactLookupName},
 		Streaming:           copilot.Bool(true),
@@ -154,20 +154,20 @@ func runSession(
 	config *copilot.SessionConfig,
 	prompt string,
 	timeout time.Duration,
-) (string, error) {
+) (content string, err error) {
 	client := copilot.NewClient(&copilot.ClientOptions{LogLevel: "error"})
+	defer func() { err = errors.Join(err, client.Stop()) }()
 	if err := client.Start(ctx); err != nil {
 		return "", err
 	}
-	defer func() { _ = client.Stop() }()
 
 	session, err := client.CreateSession(ctx, config)
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = session.Disconnect() }()
+	defer func() { err = errors.Join(err, session.Disconnect()) }()
 
-	content, err := StreamExhibit(session, prompt, timeout)
+	content, err = StreamExhibit(session, prompt, timeout)
 	if err != nil {
 		return "", err
 	}
@@ -225,14 +225,17 @@ func run() error {
 		return err
 	}
 
-	var consultedSources []Source
+	var modelReportedSources []Source
 	if AskYesNo("Research the subject on Wikipedia first?", false) {
 		fmt.Println()
 		if notes, err := researchNotes(ctx, facts, workingDirectory); err != nil {
 			fmt.Printf("Wikipedia research did not complete: %s\n", err)
 		} else {
-			consultedSources = ExtractSources(notes).Sources
+			modelReportedSources = ExtractSources(notes).Sources
 			fmt.Println("Research notes are background for you only. They are not added to the approved facts.")
+			if len(modelReportedSources) == 0 {
+				fmt.Println("Research completed without usable model-reported citations. No sources were verified.")
+			}
 		}
 	}
 
@@ -249,20 +252,29 @@ func run() error {
 
 	fmt.Println()
 	fmt.Println(FormatValidation(ValidateExhibit(exhibit)))
-	if len(consultedSources) > 0 {
+	if len(modelReportedSources) > 0 {
 		fmt.Println()
-		fmt.Println("Consulted Wikipedia sources:")
-		for _, source := range consultedSources {
+		fmt.Println("Model-reported Wikipedia sources (unverified):")
+		for _, source := range modelReportedSources {
 			fmt.Printf("- %s: %s\n", source.Title, source.URL)
 		}
+		fmt.Println("Verify these links, their contents, and their support for the research yourself; parsing does not prove they were consulted.")
 	}
 
 	fmt.Println()
 	if AskYesNo("Generate an interactive exhibit.html?", false) {
+		artifact, err := CaptureArtifactState(workingDirectory, ExhibitFileName)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Model HTML response (not file verification):")
 		if _, err := runSession(ctx, htmlConfig(workingDirectory), buildHTMLPrompt(exhibit), GenerationTimeout); err != nil {
 			return err
 		}
-		fmt.Println("Wrote exhibit.html. Open it in a browser to review the exhibit.")
+		if err := VerifyArtifactUpdate(artifact); err != nil {
+			return err
+		}
+		fmt.Println("Verified a new or changed nonempty exhibit.html. Review its facts, HTML safety, accessibility, and external assets before use.")
 	}
 	return nil
 }

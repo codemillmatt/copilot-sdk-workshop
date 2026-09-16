@@ -6,9 +6,10 @@ if (!input) throw new Error("Usage: npm start -- <http-or-https-url>");
 const target = new URL(input.includes("://") ? input : `https://${input}`);
 if (!["http:", "https:"].includes(target.protocol)) throw new Error("Enter an absolute HTTP or HTTPS URL.");
 const client = new CopilotClient();
-await client.start();
 try {
+  await client.start();
   const session = await client.createSession({
+    workingDirectory: process.cwd(),
     streaming: true, onPermissionRequest: permissionForTarget(target),
     tools: [accessibilityRuleLookup, createSnapshotReader(process.cwd())],
     availableTools: ["accessibility_rule_lookup", "read_latest_accessibility_snapshot", "playwright-browser_navigate"],

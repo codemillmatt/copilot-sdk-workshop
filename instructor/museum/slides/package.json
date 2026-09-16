@@ -1,0 +1,13 @@
+{
+  "name": "museum-workshop-instructor-slides",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Editable, reproducible instructor slides for Museum Exhibit Studio",
+  "scripts": {
+    "build": "node build.cjs"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "pptxgenjs": "4.0.1"
+  }
+}

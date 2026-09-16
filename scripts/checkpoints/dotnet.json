@@ -1,0 +1,327 @@
+{
+  "accessibility": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "01-first-session-dotnet-1"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/ResponseStreamer.cs", "block": "02-streaming-dotnet-1"},
+        {"op": "after", "file": "Program.cs", "anchor": "using GitHub.Copilot.Rpc;", "text": "using HelloCopilotSDK.Helpers;"},
+        {
+          "op": "replace-region",
+          "file": "Program.cs",
+          "anchor": "await using var session = await client.CreateSessionAsync(",
+          "end": "Console.WriteLine($\"\\nCopilot: {response.Data.Content}\");",
+          "block": "02-streaming-dotnet-2"
+        }
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op": "prepend", "file": "Helpers/AccessibilityRuleCatalog.cs", "block": "03-local-tool-dotnet-1"},
+        {"op": "after", "file": "Helpers/AccessibilityRuleCatalog.cs", "anchor": "    ];", "block": "03-local-tool-dotnet-2", "indent": 4},
+        {"op": "replace-tail", "file": "Program.cs", "anchor": "await using var session = await client.CreateSessionAsync(", "block": "03-local-tool-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op": "after", "file": "Program.cs", "anchor": "using HelloCopilotSDK.Helpers;", "block": "04-mcp-safety-dotnet-1"},
+        {
+          "op": "replace-region",
+          "file": "Program.cs",
+          "anchor": "await using var session = await client.CreateSessionAsync(",
+          "end": "});",
+          "block": "04-mcp-safety-dotnet-4"
+        },
+        {"op": "replace-tail", "file": "Program.cs", "anchor": "Console.WriteLine(\"\\nCopilot:\");", "block": "04-mcp-safety-dotnet-5"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op": "replace-braced", "file": "Program.cs", "anchor": "if (args.Length is not 1 ||", "text": ""},
+        {"op": "before", "file": "Program.cs", "anchor": "await using var client = new CopilotClient();", "block": "05-combine-tools-dotnet-1"},
+        {"op": "replace-tail", "file": "Program.cs", "anchor": "Console.WriteLine($\"\\nInspecting: {targetUri.AbsoluteUri}\\n\");", "block": "05-combine-tools-dotnet-2"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/Prompts.cs", "block": "06-structured-report-dotnet-1"},
+        {"op": "replace-tail", "file": "Program.cs", "anchor": "Console.WriteLine($\"\\nAnalyzing: {targetUri.AbsoluteUri}\\n\");", "block": "06-structured-report-dotnet-2"}
+      ]
+    },
+    {"lesson": "07-run-explain.md", "operations": []}
+  ],
+  "accessibility-references": [
+    {
+      "lesson": "01-first-session.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "01-first-session-dotnet-3"}
+      ]
+    },
+    {
+      "lesson": "02-streaming.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/ResponseStreamer.cs", "block": "02-streaming-dotnet-4"},
+        {"op": "write", "file": "Program.cs", "block": "02-streaming-dotnet-5"}
+      ]
+    },
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op": "prepend", "file": "Helpers/AccessibilityRuleCatalog.cs", "block": "03-local-tool-dotnet-1"},
+        {"op": "after", "file": "Helpers/AccessibilityRuleCatalog.cs", "anchor": "    ];", "block": "03-local-tool-dotnet-2", "indent": 4},
+        {"op": "write", "file": "Program.cs", "block": "03-local-tool-dotnet-6"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "04-mcp-safety-dotnet-7"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "05-combine-tools-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/Prompts.cs", "block": "06-structured-report-dotnet-1"},
+        {"op": "write", "file": "Program.cs", "block": "06-structured-report-dotnet-4"}
+      ]
+    }
+  ],
+  "accessibility-html-direct": [
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op": "prepend", "file": "Helpers/AccessibilityRuleCatalog.cs", "block": "03-local-tool-dotnet-1"},
+        {"op": "after", "file": "Helpers/AccessibilityRuleCatalog.cs", "anchor": "    ];", "block": "03-local-tool-dotnet-2", "indent": 4},
+        {"op": "write", "file": "Program.cs", "block": "03-local-tool-dotnet-6"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "04-mcp-safety-dotnet-7"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "05-combine-tools-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/Prompts.cs", "block": "06-structured-report-dotnet-1"},
+        {"op": "write", "file": "Program.cs", "block": "06-structured-report-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "Helpers/WorkshopPermissionHandler.cs",
+          "anchor": "    public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> CreateForTarget(",
+          "block": "09-interactive-html-report-dotnet-1",
+          "indent": 4
+        },
+        {
+          "op": "replace",
+          "file": "Program.cs",
+          "anchor": "    OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),\n",
+          "text": ""
+        },
+        {
+          "op": "replace-region",
+          "file": "Helpers/Prompts.cs",
+          "anchor": "    public static string CreateReportPrompt(Uri targetUri)",
+          "end": "        \"\"\";",
+          "block": "09-interactive-html-report-dotnet-3",
+          "indent": 4
+        },
+        {
+          "op": "replace-tail",
+          "file": "Program.cs",
+          "anchor": "await using var session = await client.CreateSessionAsync(config);",
+          "block": "09-interactive-html-report-dotnet-2"
+        }
+      ]
+    }
+  ],
+  "accessibility-model-html": [
+    {
+      "lesson": "03-local-tool.md",
+      "operations": [
+        {"op": "prepend", "file": "Helpers/AccessibilityRuleCatalog.cs", "block": "03-local-tool-dotnet-1"},
+        {"op": "after", "file": "Helpers/AccessibilityRuleCatalog.cs", "anchor": "    ];", "block": "03-local-tool-dotnet-2", "indent": 4},
+        {"op": "write", "file": "Program.cs", "block": "03-local-tool-dotnet-6"}
+      ]
+    },
+    {
+      "lesson": "04-mcp-safety.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "04-mcp-safety-dotnet-7"}
+      ]
+    },
+    {
+      "lesson": "05-combine-tools.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "05-combine-tools-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "06-structured-report.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/Prompts.cs", "block": "06-structured-report-dotnet-1"},
+        {"op": "write", "file": "Program.cs", "block": "06-structured-report-dotnet-4"}
+      ]
+    },
+    {
+      "lesson": "08-model-selection.md",
+      "operations": [
+        {"op": "write", "file": "Helpers/ModelSelector.cs", "block": "08-model-selection-dotnet-1"},
+        {"op": "after", "file": "Program.cs", "anchor": "await client.StartAsync();", "block": "08-model-selection-dotnet-2"},
+        {"op": "after", "file": "Program.cs", "anchor": "var config = new SessionConfig\n{", "block": "08-model-selection-dotnet-3", "indent": 4}
+      ]
+    },
+    {
+      "lesson": "09-interactive-html-report.md",
+      "operations": [
+        {
+          "op": "replace-function",
+          "file": "Helpers/WorkshopPermissionHandler.cs",
+          "anchor": "    public static Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> CreateForTarget(",
+          "block": "09-interactive-html-report-dotnet-1",
+          "indent": 4
+        },
+        {
+          "op": "replace",
+          "file": "Program.cs",
+          "anchor": "    OnPermissionRequest = WorkshopPermissionHandler.CreateForTarget(targetUri),\n",
+          "text": ""
+        },
+        {
+          "op": "replace-region",
+          "file": "Helpers/Prompts.cs",
+          "anchor": "    public static string CreateReportPrompt(Uri targetUri)",
+          "end": "        \"\"\";",
+          "block": "09-interactive-html-report-dotnet-3",
+          "indent": 4
+        },
+        {
+          "op": "replace-tail",
+          "file": "Program.cs",
+          "anchor": "await using var session = await client.CreateSessionAsync(config);",
+          "block": "09-interactive-html-report-dotnet-2"
+        }
+      ]
+    }
+  ],
+  "museum": [
+    {
+      "lesson": "museum-01-first-curator-session.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "museum-01-first-curator-session-dotnet-1"}
+      ]
+    },
+    {
+      "lesson": "museum-02-stream-the-curator.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "museum-02-stream-the-curator-dotnet-1"}
+      ]
+    },
+    {
+      "lesson": "museum-03-curator-voice.md",
+      "operations": [
+        {"op": "write", "file": "Program.cs", "block": "museum-03-curator-voice-dotnet-1"}
+      ]
+    },
+    {
+      "lesson": "museum-04-approved-facts.md",
+      "operations": [
+        {
+          "op": "after",
+          "file": "Program.cs",
+          "anchor": "Write for a broad public audience with warmth, clarity, and historical restraint.",
+          "block": "museum-04-approved-facts-shared-1",
+          "indent": 4
+        },
+        {
+          "op": "replace-tail",
+          "file": "Program.cs",
+          "anchor": "Console.WriteLine(\"=== Museum Exhibit Studio ===\");",
+          "block": "museum-04-approved-facts-dotnet-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-05-guardrails.md",
+      "operations": [
+        {
+          "op": "replace-region",
+          "file": "Program.cs",
+          "anchor": "Console.WriteLine(\"=== Museum Exhibit Studio ===\");",
+          "end": "    return CuratorFacts.FactSets[0];\n}",
+          "block": "museum-05-guardrails-dotnet-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-06-prove-the-structure.md",
+      "operations": [
+        {
+          "op": "replace-region",
+          "file": "Program.cs",
+          "anchor": "    Console.WriteLine();\n    await RunSessionAsync(",
+          "end": "    return 0;",
+          "block": "museum-06-prove-the-structure-dotnet-1"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-07-wikipedia-research.md",
+      "operations": [
+        {
+          "op": "before",
+          "file": "Program.cs",
+          "anchor": "try\n{\n    Console.WriteLine(\"=== Museum Exhibit Studio ===\");",
+          "block": "museum-07-wikipedia-research-dotnet-1"
+        },
+        {"op": "append", "file": "Program.cs", "block": "museum-07-wikipedia-research-dotnet-2"},
+        {
+          "op": "before",
+          "file": "Program.cs",
+          "anchor": "    Console.WriteLine();\n    var exhibit = await RunSessionAsync(",
+          "block": "museum-07-wikipedia-research-dotnet-3"
+        },
+        {
+          "op": "after",
+          "file": "Program.cs",
+          "anchor": "    Console.WriteLine(CuratorValidation.FormatValidation(CuratorValidation.ValidateExhibit(exhibit)));",
+          "block": "museum-07-wikipedia-research-dotnet-4"
+        }
+      ]
+    },
+    {
+      "lesson": "museum-08-interactive-exhibit-page.md",
+      "operations": [
+        {"op": "append", "file": "Program.cs", "block": "museum-08-interactive-exhibit-page-dotnet-1"},
+        {"op": "replace", "file": "Program.cs", "anchor": "    return 0;", "block": "museum-08-interactive-exhibit-page-dotnet-2"}
+      ]
+    }
+  ]
+}

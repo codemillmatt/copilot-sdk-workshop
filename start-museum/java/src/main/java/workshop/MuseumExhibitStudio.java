@@ -7,9 +7,9 @@ package workshop;
 // finished app's copy. Everything below is yours to write, one lesson at a time.
 //
 // Step 1  First curator session .......... create the CopilotClient, create a session with
-//                                          .setOnPermissionRequest(PermissionHandler.APPROVE_ALL)
-//                                          so requests get an answer, send a prompt, print the
-//                                          reply, then close and stop.
+//                                          .setAvailableTools(List.of()) and a callback returning
+//                                          PermissionRequestResult.reject for unexpected requests;
+//                                          send a prompt, print the reply, then close the resources.
 // Step 2  Stream the curator ............. swap the blocking send for CuratorStreamer.streamExhibit
 //                                          so tokens and [tool:start] / [tool:done] events print
 //                                          live.
@@ -25,17 +25,19 @@ package workshop;
 // Step 5  Set the guardrails ............. add generationConfig() and the single runSession()
 //                                          lifecycle function: one-tool allowlist, the Step 1
 //                                          permission handler carried forward, generation timeout,
-//                                          blank-output rejection, cleanup in nested `finally`
-//                                          blocks. Steps 6-8 reuse runSession and add nothing
+//                                          blank-output rejection, cleanup with try-with-resources.
+//                                          Steps 6-8 reuse runSession and add nothing
 //                                          to it.
 // Step 6  Prove the structure ............ call CuratorValidation.formatValidation(
 //                                              CuratorValidation.validateExhibit(exhibit)).
 // Step 7  Wikipedia research ............. add researchConfig() with CuratorSafety.wikipediaServer()
 //                                          plus CuratorSafety.wikipediaPermissionHandler(), run it
-//                                          through runSession, and print sources after the
-//                                          exhibit. Research never joins the approved facts.
+//                                          through runSession, and print model-reported,
+//                                          unverified sources. Research never joins approved facts.
 // Step 8  Interactive exhibit page ....... add htmlConfig() with the "builtin:apply_patch"
 //                                          allowlist and CuratorSafety.exhibitWritePermission(...).
+//                                          captureArtifactState before the run; verify the update
+//                                          with verifyArtifactUpdate before claiming a file write.
 
 // Your imports go here, and grow as the lessons progress.
 

@@ -2,7 +2,8 @@ import asyncio
 import sys
 
 from copilot import CopilotClient, define_tool
-from copilot.session_events import AssistantMessageData, AssistantMessageDeltaData, SessionErrorData, SessionIdleData
+from copilot.rpc import PermissionDecisionReject
+from copilot.session_events import AssistantMessageData, AssistantMessageDeltaData, SessionErrorData, SessionIdleData, ToolExecutionStartData, ToolExecutionCompleteData
 from pydantic import BaseModel, Field
 
 from accessibility_rule_catalog import ACCESSIBILITY_RULES
@@ -52,6 +53,9 @@ async def main() -> None:
 
     async with CopilotClient() as client:
         async with await client.create_session(
+            on_permission_request=lambda _request, _invocation: PermissionDecisionReject(
+                feedback="This session does not allow that permission request."
+            ),
             streaming=True,
             tools=[accessibility_rule_lookup],
             available_tools=["accessibility_rule_lookup"],
@@ -66,20 +70,30 @@ async def main() -> None:
                     case AssistantMessageDeltaData(delta_content=delta) if delta:
                         received_delta = True
                         print(delta, end="", flush=True)
-                    case AssistantMessageData(content=content) if content and not received_delta:
-                        print(content)
+                    case AssistantMessageData(content=content):
+                        if content and not received_delta:
+                            print(content)
+                        received_delta = False
+                    case ToolExecutionStartData(tool_name=name):
+                        print(f"\n[tool:start] {name}")
+                    case ToolExecutionCompleteData(success=success):
+                        print(f"[tool:done] success={success}")
                     case SessionErrorData(message=message):
                         error = RuntimeError(message)
                         done.set()
                     case SessionIdleData():
                         done.set()
 
-            session.on(on_event)
-            print("\nCopilot:")
-            await session.send(
-                f"Use accessibility_rule_lookup to answer this question: {question}"
-            )
-            await done.wait()
+            unsubscribe = session.on(on_event)
+            try:
+                print("\nCopilot:")
+                async with asyncio.timeout(120):
+                    await session.send(
+                        f"Use accessibility_rule_lookup to answer this question: {question}"
+                    )
+                    await done.wait()
+            finally:
+                unsubscribe()
             if error is not None:
                 raise error
 
